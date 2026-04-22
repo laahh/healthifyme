@@ -49,7 +49,7 @@ export function SplashPage() {
         <div className="flex flex-col items-center space-y-6 text-center z-10">
           
           <div className="space-y-1">
-            <img src="/images/-new.jpeg" alt="W.E.L.L Program" className="w-56 max-w-full object-contain" />
+            <img src="/images/logo-new.jpeg" alt="W.E.L.L Program" className="w-56 max-w-full object-contain" />
           </div>
         </div>
         <div className="flex-1 flex flex-col justify-end w-full max-w-[200px] pb-12 z-10">
