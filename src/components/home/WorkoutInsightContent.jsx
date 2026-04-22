@@ -1,23 +1,28 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { getSessionUser } from "../../auth/auth";
 
 const FALLBACK_AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCNeGKVRJgIPImTURVGAslzSS3ZGPZ1xwjwxmvnBO6MgCf_BcNjV1Jb4dQVUUhe2eezIrwoSJlx8y4bf3tE4mzYZ7Ob5GUGFekJ8dYQKoLn6pO04wFbneUeuijPEKJvnZIoJGeL-M2ktUWVwsSZJVp0p6H9hEYTuSXFd30ToMP9i6HpnGMb3hPgU95cjKY1BqdQXKMKQz7xSUcpPh5dxD-VMYhec9PJLins0xpetqOgFxP2RK1LxYvs18mJOZUQXWm9j8hAZlhXO0Q";
 
 export default function WorkoutInsightContent() {
+  const location = useLocation();
+  const currentPath = location.pathname;
+  const isNavActive = (path) => currentPath === path;
+  const navItemClass = (path) =>
+    `flex flex-col items-center gap-1 ${isNavActive(path) ? "text-primary" : "text-slate-400"}`;
+  const navLabelClass = (path) => `text-[10px] ${isNavActive(path) ? "font-bold" : "font-medium"}`;
   const sessionUser = getSessionUser();
   const greetingName = sessionUser?.name?.trim().split(/\s+/)[0] || "Pengguna";
   const avatarPhoto = sessionUser?.photo || FALLBACK_AVATAR;
 
   const performancePoints = [
-    { t: "12 AM", x: 0, y: 72 },
-    { t: "03 AM", x: 40, y: 66 },
-    { t: "06 AM", x: 85, y: 42 },
-    { t: "09 AM", x: 130, y: 30 },
-    { t: "12 PM", x: 175, y: 40 },
-    { t: "03 PM", x: 220, y: 35 },
-    { t: "06 PM", x: 265, y: 58 },
-    { t: "09 PM", x: 310, y: 52 },
+    { t: "Minggu", x: 0, y: 72 },
+    { t: "Sabtu", x: 52, y: 66 },
+    { t: "Jumat", x: 103, y: 42 },
+    { t: "Kamis", x: 155, y: 30 },
+    { t: "Rabu", x: 207, y: 40 },
+    { t: "Selasa", x: 258, y: 35 },
+    { t: "Senin", x: 310, y: 52 },
   ];
   const performancePath = performancePoints.map((p) => `${p.x},${p.y}`).join(" ");
 
@@ -86,19 +91,20 @@ export default function WorkoutInsightContent() {
                 <polyline fill="none" stroke="url(#workoutLine)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" points={performancePath} />
                 <circle cx={310} cy={52} r="4.5" fill="#111827" />
               </svg>
-              <div className="grid grid-cols-4 text-[10px] text-slate-400 mt-1">
-                <span>12 AM</span>
-                <span className="text-center">06 AM</span>
-                <span className="text-center">12 PM</span>
-                <span className="text-right">06 PM</span>
+              <div className="grid grid-cols-7 text-[10px] text-slate-400 mt-1">
+                {performancePoints.map((point) => (
+                  <span key={point.t} className="text-center">
+                    {point.t}
+                  </span>
+                ))}
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-2xl font-bold leading-none">84</p>
+                <p className="text-2xl font-bold leading-none">45</p>
                 <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
-                  score
-                  <span className="text-green-500 font-semibold">+6%</span>
+                Menit/Hari (Rata-rata)
+                  <span className="text-green-500 font-semibold">+40%</span>
                 </p>
               </div>
               <button className="h-9 px-4 rounded-full bg-black text-white text-sm font-semibold">Start</button>
@@ -135,7 +141,7 @@ export default function WorkoutInsightContent() {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold">
                 {[
-                  { label: "Total Kalori", pct: 74, color: "bg-blue-500" },
+                  { label: "Total Kalori", pct: 350, color: "bg-blue-500" },
                   { label: "Maks Denyut Nadi", pct: 160, color: "bg-violet-500" },
                   { label: "Freq dalam minggu", pct: 4, color: "bg-amber-500" },
                   { label: "Rata-rata Denyut Nadi", pct: 155, color: "bg-emerald-500" },
@@ -218,30 +224,46 @@ export default function WorkoutInsightContent() {
         </div>
 
         <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-100 px-6 py-3 flex justify-between items-center z-20">
-          <Link to="/home" className="flex flex-col items-center gap-1 text-primary">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
+          <Link to="/home" className={navItemClass("/home")}>
+            <span
+              className="material-symbols-outlined"
+              style={{ fontVariationSettings: `'FILL' ${isNavActive("/home") ? 1 : 0}` }}
+            >
               grid_view
             </span>
-            <span className="text-[10px] font-bold">Dashboard</span>
+            <span className={navLabelClass("/home")}>Dashboard</span>
           </Link>
-          <Link className="flex flex-col items-center gap-1 text-slate-400" to="/nutrition/insight">
-            <span className="material-symbols-outlined">restaurant</span>
-            <span className="text-[10px] font-medium">Makanan</span>
+          <Link className={navItemClass("/nutrition/insight")} to="/nutrition/insight">
+            <span
+              className="material-symbols-outlined"
+              style={{ fontVariationSettings: `'FILL' ${isNavActive("/nutrition/insight") ? 1 : 0}` }}
+            >
+              restaurant
+            </span>
+            <span className={navLabelClass("/nutrition/insight")}>Makanan</span>
           </Link>
           <div className="relative -top-8">
             <Link to="/activity/capture" className="size-14 bg-primary rounded-full text-white shadow-xl shadow-primary/30 flex items-center justify-center">
               <span className="material-symbols-outlined text-3xl">add</span>
             </Link>
           </div>
-          <Link className="flex flex-col items-center gap-1 text-primary" to="/workout/insight">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
+          <Link className={navItemClass("/workout/insight")} to="/workout/insight">
+            <span
+              className="material-symbols-outlined"
+              style={{ fontVariationSettings: `'FILL' ${isNavActive("/workout/insight") ? 1 : 0}` }}
+            >
               exercise
             </span>
-            <span className="text-[10px] font-bold">Olahraga</span>
+            <span className={navLabelClass("/workout/insight")}>Olahraga</span>
           </Link>
-          <Link className="flex flex-col items-center gap-1 text-slate-400" to="/profile">
-            <span className="material-symbols-outlined">person</span>
-            <span className="text-[10px] font-medium">Profil</span>
+          <Link className={navItemClass("/profile")} to="/profile">
+            <span
+              className="material-symbols-outlined"
+              style={{ fontVariationSettings: `'FILL' ${isNavActive("/profile") ? 1 : 0}` }}
+            >
+              person
+            </span>
+            <span className={navLabelClass("/profile")}>Profil</span>
           </Link>
         </nav>
       </div>

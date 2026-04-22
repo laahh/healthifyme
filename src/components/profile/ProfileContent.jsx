@@ -74,6 +74,31 @@ export default function ProfileContent() {
   const tier = user?.membershipTier || "MEMBER";
   const stats = user?.stats || { foodUploads: 0, activityUploads: 0, coupons: 0 };
   const mcu = user?.mcu;
+  const mcuEntries = useMemo(() => {
+    if (!mcu || typeof mcu !== "object") return [];
+    return Object.entries(mcu).filter(([, value]) => value != null && String(value).trim() !== "");
+  }, [mcu]);
+
+  const mcuLabelMap = {
+    tanggal: "Tanggal",
+    lokasi: "Lokasi",
+    gulaDarahPuasa: "Gula darah puasa",
+    kolesterolTotal: "Kolesterol total",
+    catatan: "Catatan",
+    GDP: "GDP",
+    Kolesterol: "Kolesterol",
+    IMT: "IMT",
+    GulaDarahPuasa: "Gula darah puasa (raw)",
+    KolesterolTotal: "Kolesterol total (raw)",
+    SindromMetabolik: "Sindrom metabolik",
+    FraminghamScore: "Framingham score",
+  };
+
+  const toReadableLabel = (key) =>
+    (mcuLabelMap[key] || key)
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/_/g, " ")
+      .trim();
 
   return (
     <div className="bg-surface text-on-background min-h-screen pb-32 min-h-[max(884px,100dvh)]">
@@ -203,36 +228,21 @@ export default function ProfileContent() {
             <div className="p-5 rounded-[2rem] bg-surface-container-lowest border border-outline-variant/10 space-y-4">
               <h2 className="text-xl font-extrabold">Data MCU</h2>
               <p className="text-sm text-on-surface-variant">Riwayat medical check-up</p>
-              {mcu ? (
+              {mcuEntries.length > 0 ? (
                 <dl className="space-y-3 text-sm">
-                  <div className="flex justify-between gap-4 border-b border-outline-variant/10 pb-2">
-                    <dt className="text-on-surface-variant">Tanggal</dt>
-                    <dd className="font-semibold text-on-surface text-right">{mcu.tanggal}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-outline-variant/10 pb-2">
-                    <dt className="text-on-surface-variant">Lokasi</dt>
-                    <dd className="font-medium text-on-surface text-right">{mcu.lokasi}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-outline-variant/10 pb-2">
-                    <dt className="text-on-surface-variant">Tekanan darah</dt>
-                    <dd className="font-medium text-on-surface text-right">{mcu.tekananDarah}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-outline-variant/10 pb-2">
-                    <dt className="text-on-surface-variant">Gula darah puasa</dt>
-                    <dd className="font-medium text-on-surface text-right">{mcu.gulaDarahPuasa}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-outline-variant/10 pb-2">
-                    <dt className="text-on-surface-variant">Kolesterol </dt>
-                    <dd className="font-medium text-on-surface text-right">235 (200mg/dl)</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-outline-variant/10 pb-2">
-                    <dt className="text-on-surface-variant">Hemoglobin</dt>
-                    <dd className="font-medium text-on-surface text-right">{mcu.hemoglobin}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-on-surface-variant mb-1">Catatan</dt>
-                    <dd className="text-on-surface leading-relaxed">{mcu.catatan}</dd>
-                  </div>
+                  {mcuEntries.map(([key, value], index) => {
+                    const isLast = index === mcuEntries.length - 1;
+                    const isLongText = key.toLowerCase().includes("catatan") || String(value).length > 60;
+                    return (
+                      <div
+                        key={key}
+                        className={`flex gap-4 ${isLongText ? "flex-col" : "justify-between"} ${!isLast ? "border-b border-outline-variant/10 pb-2" : ""}`}
+                      >
+                        <dt className="text-on-surface-variant">{toReadableLabel(key)}</dt>
+                        <dd className={`text-on-surface ${isLongText ? "leading-relaxed" : "font-medium text-right"}`}>{value}</dd>
+                      </div>
+                    );
+                  })}
                 </dl>
               ) : (
                 <p className="text-sm text-on-surface-variant">Belum ada data MCU untuk akun ini.</p>
@@ -271,12 +281,12 @@ export default function ProfileContent() {
                 </div>
                 <div className="grid grid-cols-3 gap-8 mt-8 w-full border-t border-outline-variant/10 pt-6">
                   <div>
-                    <p className="text-sm font-semibold text-on-surface">{stats.foodUploads}</p>
-                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">Upload Makanan</p>
+                    <p className="text-sm font-semibold text-on-surface">75%</p>
+                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">Score kkal makanan</p>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-on-surface">{stats.activityUploads}</p>
-                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">Upload Aktivitas</p>
+                    <p className="text-sm font-semibold text-on-surface">50%</p>
+                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">⁠⁠score olahraga</p>
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-on-surface">{stats.coupons}</p>

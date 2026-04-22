@@ -8,7 +8,7 @@
       "email": "budi.santoso@email.com",
       "phone": "081234567890",
       "photo": "https://lh3.googleusercontent.com/aida-public/AB6AXuB7uwxn84_hs7oaiFQKLbY8Y-f6y693VmByLqOGrcuA-6v64TcopIAZDvqqRbuzbrkuxM-pg1MkjTwcvsrU3tvYgiBkKItP0qtNqqx-sailK7sQv4jDejfx1_ni-xcQ-frac1FsVCI7bOn9-1fejw0U6l9C01hDLQZ6psZ2La1RnaOfkp8bI9vr2jEd_l3nE7QULFkpC3rdsEBOsNTajMnpxUadnp1jj199t_1nXryacDVai90wtEXEjWZ84YSz4vgyLw0E3pTlJD3H",
-      "membershipTier": "PLATINUM MEMBER",
+      "membershipTier": "OPERATOR",
       "address": {
         "label": "Rumah",
         "detail": "Jl. Melati No. 45, RT 02/RW 08",
@@ -16,14 +16,17 @@
       },
       "mcu": {
         "tanggal": "2026-04-09",
-        "lokasi": "Medical Check Up",
-        "tekananDarah": "-",
-        "gulaDarahPuasa": "104 mg/dL (100 mg/dL)",
-        "kolesterolTotal": "235 mg/dL (200 mg/dL)",
-        "hemoglobin": "-",
+        "lokasi": "TMC Pemuda",
+        "gulaDarahPuasa": "104 mg/dL ",
+        "kolesterolTotal": "235 mg/dL ",
         "catatan": "Fit With Note. IMT 27.04 (18-25), terdapat Sindrom Metabolik. Kontrol ulang dalam 1 bulan.",
-        "GDP": "104 (100mg/dl)",
-        "Kolesterol": "235 (200mg/dl)"
+        "GDP": "104 ",
+        "Kolesterol": "235",
+        "IMT": "27.04 (Overweight )",
+        "GulaDarahPuasa": "104mg/dl",
+        "KolesterolTotal": "235mg/dl",
+        "SindromMetabolik": "Ya",
+        "FraminghamScore": "Low Risk"
       },
       "stats": {
         "foodUploads": 12,

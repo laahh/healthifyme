@@ -260,7 +260,7 @@ export default function NutritionInsightContent() {
               </div>
               <div className="flex flex-col items-center justify-center">
                 <p className="text-[24px] font-bold leading-tight tracking-tight text-center">Great job, {greetingName}!</p>
-                <p className="text-slate-600 dark:text-slate-400 text-base font-normal leading-normal text-center mt-1">Target kalori hari ini adalah 2550 kkal.</p>
+                <p className="text-slate-600 dark:text-slate-400 text-base font-normal leading-normal text-center mt-1">Maksimal kalori hari ini adalah 2550 kka</p>
                 <div className="flex gap-3 mt-3 items-center">
                   <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
                     <span className="material-symbols-outlined text-base">local_fire_department</span>
@@ -268,7 +268,7 @@ export default function NutritionInsightContent() {
                   </span>
                   <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
                     <span className="material-symbols-outlined text-base">percent</span>
-                    {todayCalorieProgressPct}% dari target
+                    {todayCalorieProgressPct}% dari Maksimal
                   </span>
                 </div>
               </div>
@@ -437,11 +437,11 @@ export default function NutritionInsightContent() {
           <div className="flex items-stretch justify-between gap-4 rounded-xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
             <div className="flex flex-[2_2_0px] flex-col gap-4">
               <div className="flex flex-col gap-1">
-                <p className="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight">High-Protein Quinoa Bowl</p>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Perfect balance of 35g protein and moderate carbs to replenish your glycogen.</p>
+              <p className="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight">Mangkuk Quinoa Tinggi Protein</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Keseimbangan sempurna antara 35g protein dan karbohidrat sedang untuk memulihkan cadangan glikogen tubuh Anda.</p>
               </div>
               <button className="flex min-w-[120px] items-center justify-center overflow-hidden rounded-lg h-9 px-4 bg-primary text-white gap-2 text-sm font-semibold w-fit">
-                <span className="truncate">View Recipe</span>
+                <span className="truncate">liat resep</span>
                 <span className="material-symbols-outlined text-base">restaurant</span>
               </button>
             </div>
@@ -456,22 +456,23 @@ export default function NutritionInsightContent() {
           </div>
         </div>
 
+    
         <div className="px-4 py-4">
-          <h3 className="text-lg font-bold leading-tight tracking-[-0.015em] mb-3 px-1">Recovery Protocol</h3>
+          <h3 className="text-lg font-bold leading-tight tracking-[-0.015em] mb-3 px-1">Rekomendasi</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
               <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                 <span className="material-symbols-outlined text-blue-600">water_drop</span>
               </div>
               <p className="font-bold text-sm">Hydration</p>
-              <p className="text-xs text-slate-500">Drink 500ml of water with electrolytes to recover from high BPM output.</p>
+              <p className="text-xs text-slate-500">Minum 500ml air + elektrolit setelah sesi intensitas tinggi.</p>
             </div>
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
               <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                 <span className="material-symbols-outlined text-green-600">self_improvement</span>
               </div>
-              <p className="font-bold text-sm">Active Stretch</p>
-              <p className="text-xs text-slate-500">10 mins of lower body static stretching to prevent muscle tightness.</p>
+              <p className="font-bold text-sm">Stretching</p>
+              <p className="text-xs text-slate-500">10 menit lower-body stretching untuk mencegah pegal berlebih.</p>
             </div>
           </div>
         </div>
