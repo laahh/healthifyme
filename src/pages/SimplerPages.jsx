@@ -161,18 +161,7 @@ export function WelcomePage() {
             Continue
             <span className="material-symbols-outlined transition-transform group-hover:translate-x-1">arrow_forward</span>
           </button>
-          <div className="text-center">
-            <p className="text-on-surface-variant text-sm">
-              Already have an account?
-              <button
-                type="button"
-                onClick={() => navigate("/login")}
-                className="text-primary font-bold hover:underline decoration-2 underline-offset-4 ml-1 bg-transparent border-none p-0 cursor-pointer font-inherit"
-              >
-                Sign In
-              </button>
-            </p>
-          </div>
+         
         </div>
         <div className="mt-12 flex justify-center gap-1.5 opacity-30">
           <div className="w-8 h-1.5 rounded-full bg-primary" />
