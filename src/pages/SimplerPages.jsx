@@ -49,7 +49,7 @@ export function SplashPage() {
         <div className="flex flex-col items-center space-y-6 text-center z-10">
           
           <div className="space-y-1">
-            <img src="/dist/assets/logo.jpeg" alt="W.E.L.L Program" className="w-56 max-w-full object-contain" />
+            <img src="/images/logo.png" alt="W.E.L.L Program" className="w-56 max-w-full object-contain" />
           </div>
         </div>
         <div className="flex-1 flex flex-col justify-end w-full max-w-[200px] pb-12 z-10">
@@ -85,7 +85,7 @@ export function GetStartedPage() {
           <div className="absolute inset-0 bg-surface-container-low rounded-[40px] rotate-3 scale-95 opacity-50" />
           <div className="absolute inset-0 bg-surface-container-high rounded-[48px] -rotate-2" />
           <div className="relative w-[85%] h-[85%] overflow-hidden rounded-[32px] shadow-2xl shadow-on-surface/5">
-            <img className="w-full h-full object-cover" src="/dist/assets/preview.png" alt="Get Started" />
+            <img className="w-full h-full object-cover" src="/images/getstarted.png" alt="Get Started" />
           </div>
           <div className="absolute -bottom-6 -right-4 w-24 h-24 bg-white/40 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg transform rotate-12">
             <span className="material-symbols-outlined text-primary text-4xl">restaurant</span>
@@ -133,7 +133,7 @@ export function WelcomePage() {
           <div className="absolute inset-0 rounded-full border border-primary/10 scale-110" />
           <div className="absolute inset-0 rounded-full border border-primary/5 scale-125" />
           <div className="w-full h-full rounded-full overflow-hidden bg-surface-container-low shadow-2xl ring-8 ring-surface-container-lowest">
-            <img className="w-full h-full object-contain object-center" src="/dist/assets/makanan.jpeg" alt="Makanan sehat" />
+            <img className="w-full h-full object-contain object-center" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRk0lt_7kjJAcR1HkSEKKWaRv2uw-n-fja0a4zpBVCt2r4mTixid9w6ddHZLdJ-q_vn4WD0ZTh6qYfvcccd-U85xk1qFf0rAv8Ekocr9LX0pCNtdi9ircIw_DQzDZ0Fqz0EUFiJTABOosNZUcUJ-p1j1d8X0YgLekgYV4SydagsRqWk9rQkULLfU1NoE3lKASKI-Famds6spJUoe6DZcwHmYtKAs-m_1F2PTt4ZVNCas5VdklhPsgU_S0M4DRrv2r-kg0hoailnyOM" alt="Makanan sehat" />
           </div>
           <div className="absolute -bottom-2 -right-2 bg-surface-container-lowest p-4 rounded-3xl shadow-lg flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary">

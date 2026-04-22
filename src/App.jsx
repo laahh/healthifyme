@@ -44,6 +44,8 @@ export default function App() {
         <Route path="/cart" element={<CartPage />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Route>
+
+      <Route path="*" element={<Navigate to="/welcome" replace />} />
     </Routes>
   );
 }
