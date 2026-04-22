@@ -16,6 +16,11 @@ const MACRO_G_TARGETS = {
 
 export default function NutritionInsightContent() {
   const location = useLocation();
+  const currentPath = location.pathname;
+  const isNavActive = (path) => currentPath === path;
+  const navItemClass = (path) =>
+    `flex flex-col items-center gap-1 ${isNavActive(path) ? "text-primary" : "text-slate-400"}`;
+  const navLabelClass = (path) => `text-[10px] ${isNavActive(path) ? "font-bold" : "font-medium"}`;
   const sessionUser = getSessionUser();
   const greetingName = sessionUser?.name?.trim().split(/\s+/)[0] || "Pengguna";
   const avatarPhoto = sessionUser?.photo || FALLBACK_AVATAR;
@@ -488,28 +493,46 @@ export default function NutritionInsightContent() {
         </div>
 
         <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-100 px-6 py-3 flex justify-between items-center z-20">
-          <Link to="/home" className="flex flex-col items-center gap-1 text-primary" href="#">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
+          <Link to="/home" className={navItemClass("/home")} href="#">
+            <span
+              className="material-symbols-outlined"
+              style={{ fontVariationSettings: `'FILL' ${isNavActive("/home") ? 1 : 0}` }}
+            >
               grid_view
             </span>
-            <span className="text-[10px] font-bold">Dashboard</span>
+            <span className={navLabelClass("/home")}>Dashboard</span>
           </Link>
-          <Link className="flex flex-col items-center gap-1 text-slate-400" to="/nutrition/insight">
-            <span className="material-symbols-outlined">restaurant</span>
-            <span className="text-[10px] font-medium">Makanan</span>
+          <Link className={navItemClass("/nutrition/insight")} to="/nutrition/insight">
+            <span
+              className="material-symbols-outlined"
+              style={{ fontVariationSettings: `'FILL' ${isNavActive("/nutrition/insight") ? 1 : 0}` }}
+            >
+              restaurant
+            </span>
+            <span className={navLabelClass("/nutrition/insight")}>Makanan</span>
           </Link>
           <div className="relative -top-8">
             <Link to="/activity/capture" className="size-14 bg-primary rounded-full text-white shadow-xl shadow-primary/30 flex items-center justify-center">
               <span className="material-symbols-outlined text-3xl">add</span>
             </Link>
           </div>
-          <Link className="flex flex-col items-center gap-1 text-slate-400" to="/workout/insight">
-            <span className="material-symbols-outlined">exercise</span>
-            <span className="text-[10px] font-medium">Workout</span>
+          <Link className={navItemClass("/workout/insight")} to="/workout/insight">
+            <span
+              className="material-symbols-outlined"
+              style={{ fontVariationSettings: `'FILL' ${isNavActive("/workout/insight") ? 1 : 0}` }}
+            >
+              exercise
+            </span>
+            <span className={navLabelClass("/workout/insight")}>Olahraga</span>
           </Link>
-          <Link className="flex flex-col items-center gap-1 text-slate-400" to="/profile">
-            <span className="material-symbols-outlined">person</span>
-            <span className="text-[10px] font-medium">Profil</span>
+          <Link className={navItemClass("/profile")} to="/profile">
+            <span
+              className="material-symbols-outlined"
+              style={{ fontVariationSettings: `'FILL' ${isNavActive("/profile") ? 1 : 0}` }}
+            >
+              person
+            </span>
+            <span className={navLabelClass("/profile")}>Profil</span>
           </Link>
         </nav>
       </div>
