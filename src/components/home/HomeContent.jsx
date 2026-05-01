@@ -454,9 +454,9 @@ Aturan:
   };
 
   return (
-    <div className="bg-surface font-['Public_Sans',sans-serif] text-on-surface min-h-screen">
-      <div className="max-w-md mx-auto bg-surface-container-lowest min-h-screen shadow-xl flex flex-col">
-        <header className="flex items-center justify-between p-4 sticky top-0 bg-emerald-50/80 backdrop-blur-md z-10">
+    <div className="bg-surface font-['Public_Sans',sans-serif] text-on-surface h-dvh min-h-dvh overflow-hidden">
+      <div className="max-w-md mx-auto bg-surface-container-lowest h-full shadow-xl flex flex-col overflow-hidden">
+        <header className="flex shrink-0 items-center justify-between px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] bg-emerald-50/80 backdrop-blur-md z-10">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
             <span className="material-symbols-outlined text-primary">health_metrics</span>
           </div>
@@ -466,6 +466,7 @@ Aturan:
           </button>
         </header>
 
+        <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
         <section className="p-4 flex items-center gap-4">
           <div className="relative">
             <div className="size-20 rounded-full border-2 border-primary p-1 overflow-hidden bg-slate-100">
@@ -571,7 +572,7 @@ Aturan:
           </div>
         </section>
 
-        <section className="px-4 py-4 mb-20">
+        <section className="px-4 py-4">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-sm font-bold">Aktivitas Terakhir</h3>
             <Link to="/history" className="text-xs font-semibold text-primary">
@@ -640,8 +641,9 @@ Aturan:
                 })}
           </div>
         </section>
+        </main>
 
-        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-100 px-6 py-3 flex justify-between items-center z-20">
+        <nav className="absolute bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-100 px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex justify-between items-center z-20">
           <Link to="/home" className="flex flex-col items-center gap-1 text-primary" href="#">
             <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
               grid_view
