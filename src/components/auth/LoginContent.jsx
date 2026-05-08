@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { authenticate, getSession, setSessionUser } from "../../auth/auth";
+import { getSession, loginWithPassword } from "../../auth/auth";
 
 export default function LoginContent() {
   const navigate = useNavigate();
@@ -18,22 +18,21 @@ export default function LoginContent() {
     }
   }, [navigate, from]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     const u = username.trim();
     if (!u || !password) {
-      setError("Isi username dan password.");
+      setError("Isi SID dan password (SID).");
       return;
     }
     setLoading(true);
-    const user = authenticate(u, password);
+    const { user, error: loginError } = await loginWithPassword(u, password);
     setLoading(false);
     if (!user) {
-      setError("Username atau password salah.");
+      setError(loginError || "Login gagal.");
       return;
     }
-    setSessionUser(user);
     navigate("/splash", { replace: true, state: { next: from } });
   };
 
@@ -63,7 +62,7 @@ export default function LoginContent() {
               Welcome <span className="text-primary"></span>
             </h1>
             <p className="text-on-surface-variant font-medium text-lg leading-relaxed max-w-sm">
-              Silahkan login untuk melanjutkan ke aplikasi menggunakan SID Anda
+              Login dengan SID Anda; isi password dengan SID yang sama.
             </p>
            
           </div>
@@ -76,7 +75,7 @@ export default function LoginContent() {
               ) : null}
               <div className="space-y-2">
                 <label className="font-label font-semibold text-sm text-on-surface-variant px-1" htmlFor="login-username">
-                  Username
+                  SID
                 </label>
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">
@@ -88,7 +87,7 @@ export default function LoginContent() {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     className="w-full pl-12 pr-4 py-4 bg-surface-container-highest border-none rounded-xl focus:ring-1 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-outline"
-                    placeholder="budi"
+                    placeholder="contoh: C5BXK"
                     type="text"
                   />
                 </div>

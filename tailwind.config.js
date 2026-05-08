@@ -67,6 +67,28 @@ export default {
         body: ["Inter", "sans-serif"],
         label: ["Inter", "sans-serif"],
       },
+      keyframes: {
+        "exercise-hero-in": {
+          "0%": { opacity: "0", transform: "scale(1.03)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "exercise-sheet-in": {
+          "0%": { opacity: "0", transform: "translateY(14px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "exercise-row-in": {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        "exercise-hero-in":
+          "exercise-hero-in 0.68s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "exercise-sheet-in":
+          "exercise-sheet-in 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards",
+        "exercise-row-in":
+          "exercise-row-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both",
+      },
     },
   },
   plugins: [],

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getSessionUser, logout, mergeSessionUser } from "../../auth/auth";
+import { upsertProfileToCloud } from "../../services/supabaseDataService";
 
 const FALLBACK_AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuB7uwxn84_hs7oaiFQKLbY8Y-f6y693VmByLqOGrcuA-6v64TcopIAZDvqqRbuzbrkuxM-pg1MkjTwcvsrU3tvYgiBkKItP0qtNqqx-sailK7sQv4jDejfx1_ni-xcQ-frac1FsVCI7bOn9-1fejw0U6l9C01hDLQZ6psZ2La1RnaOfkp8bI9vr2jEd_l3nE7QULFkpC3rdsEBOsNTajMnpxUadnp1jj199t_1nXryacDVai90wtEXEjWZ84YSz4vgyLw0E3pTlJD3H";
@@ -58,26 +59,42 @@ export default function ProfileContent() {
     }
   }, [query]);
 
-  const saveProfile = () => {
-    mergeSessionUser({ name: profile.name, phone: profile.phone, email: profile.email });
+  const saveProfile = async () => {
+    const nextUser = mergeSessionUser({ name: profile.name, phone: profile.phone, email: profile.email });
     localStorage.setItem("profile_info_v1", JSON.stringify(profile));
+    if (nextUser?.id) {
+      upsertProfileToCloud(nextUser.id, {
+        name: profile.name,
+        phone: profile.phone,
+        email: profile.email,
+        address: nextUser.address || null,
+      }).catch(() => {});
+    }
     setSessionTick((x) => x + 1);
   };
 
-  const saveAddress = () => {
-    mergeSessionUser({ address: { ...address } });
+  const saveAddress = async () => {
+    const nextUser = mergeSessionUser({ address: { ...address } });
     localStorage.setItem("profile_address_v1", JSON.stringify(address));
+    if (nextUser?.id) {
+      upsertProfileToCloud(nextUser.id, {
+        name: nextUser.name || "",
+        phone: nextUser.phone || "",
+        email: nextUser.email || "",
+        address: { ...address },
+      }).catch(() => {});
+    }
     setSessionTick((x) => x + 1);
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 
   const displayName = user?.name || "Pengguna";
   const photoUrl = user?.photo || FALLBACK_AVATAR;
-  const tier = user?.membershipTier || "MEMBER";
+  const tier = user?.jabatanFungsional || user?.jabatan_fungsional || "MEMBER";
   const stats = user?.stats || { foodUploads: 0, activityUploads: 0, coupons: 0 };
   const mcu = user?.mcu;
   const mcuEntries = useMemo(() => {
@@ -408,6 +425,22 @@ export default function ProfileContent() {
                   </div>
                   <span className="material-symbols-outlined text-on-surface-variant/40 group-hover:text-primary transition-colors">chevron_right</span>
                 </button>
+
+                <Link
+                  to="/cognitive-tests"
+                  className="w-full flex items-center justify-between p-4 bg-surface-container-lowest rounded-2xl group hover:bg-surface-container-high transition-all active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-primary/10 transition-colors">
+                      <span className="material-symbols-outlined">biotech</span>
+                    </div>
+                    <div className="text-left">
+                      <span className="font-medium text-on-surface block">TES PVT</span>
+                      <span className="text-xs text-on-surface-variant">Kewaspadaan psikomotor &amp; memori kerja</span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-on-surface-variant/40 group-hover:text-primary transition-colors">chevron_right</span>
+                </Link>
 
                 <button
                   type="button"

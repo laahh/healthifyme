@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { getSession } from "../auth/auth";
 import ActivityRunDetailContent from "../components/home/ActivityRunDetailContent";
 import ActivityCaptureContent from "../components/home/ActivityCaptureContent";
 import FoodAnalysisResultContent from "../components/home/FoodAnalysisResultContent";
@@ -7,16 +8,25 @@ import WorkoutAnalysisResultContent from "../components/home/WorkoutAnalysisResu
 import HistoryItemDetailContent from "../components/home/HistoryItemDetailContent";
 import NutritionInsightContent from "../components/home/NutritionInsightContent";
 import WorkoutInsightContent from "../components/home/WorkoutInsightContent";
+import WorkoutExercisesListContent from "../components/home/WorkoutExercisesListContent";
+import WorkoutExerciseDetailContent from "../components/home/WorkoutExerciseDetailContent";
 import HomeContent from "../components/home/HomeContent";
 import HistoryContent from "../components/home/HistoryContent";
 import LoginContent from "../components/auth/LoginContent";
 import ProfileContent from "../components/profile/ProfileContent";
+import CognitiveTestsHubContent from "../components/cognitive/CognitiveTestsHubContent";
+import PvtTestContent from "../components/cognitive/PvtTestContent";
+import WorkingMemoryTestContent from "../components/cognitive/WorkingMemoryTestContent";
+import CognitiveTestResultsContent from "../components/cognitive/CognitiveTestResultsContent";
+import CognitiveTestSessionContent from "../components/cognitive/CognitiveTestSessionContent";
 
 export function SplashPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  /** Setelah login: `state.next` (mis. /home). Tanpa state: onboarding ke /get-started. */
-  const nextPath = location.state?.next ?? "/get-started";
+  /** Sudah login: ke /home (atau `state.next` setelah login). Belum login: onboarding splash → get-started → welcome → login. */
+  const nextPath = getSession()
+    ? (location.state?.next ?? "/home")
+    : "/get-started";
   const [progress, setProgress] = useState(0);
 
   const durationMs = 4000;
@@ -76,6 +86,12 @@ export function SplashPage() {
 export function GetStartedPage() {
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (getSession()) {
+      navigate("/home", { replace: true });
+    }
+  }, [navigate]);
+
   return (
     <div className="relative flex h-dvh min-h-dvh w-full flex-col items-center justify-center overflow-y-auto overflow-x-hidden bg-surface px-6 py-8 text-on-surface font-body selection:bg-primary-fixed selection:text-on-primary-fixed pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-primary-fixed/20 rounded-full blur-3xl" />
@@ -117,6 +133,12 @@ export function GetStartedPage() {
 
 export function WelcomePage() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (getSession()) {
+      navigate("/home", { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <div className="flex h-dvh min-h-dvh w-full flex-col overflow-hidden text-on-background selection:bg-primary-fixed selection:text-on-primary-fixed">
@@ -203,6 +225,14 @@ export function NutritionInsightPage() {
 
 export function WorkoutInsightPage() {
   return <WorkoutInsightContent />;
+}
+
+export function WorkoutExercisesListPage() {
+  return <WorkoutExercisesListContent />;
+}
+
+export function WorkoutExerciseDetailPage() {
+  return <WorkoutExerciseDetailContent />;
 }
 
 export function HistoryPage() {
@@ -378,4 +408,24 @@ export function MenuPage() {
 
 export function ProfilePage() {
   return <ProfileContent />;
+}
+
+export function CognitiveTestsHubPage() {
+  return <CognitiveTestsHubContent />;
+}
+
+export function CognitiveTestSessionPage() {
+  return <CognitiveTestSessionContent />;
+}
+
+export function PvtTestPage() {
+  return <PvtTestContent />;
+}
+
+export function WorkingMemoryTestPage() {
+  return <WorkingMemoryTestContent />;
+}
+
+export function CognitiveTestResultsPage() {
+  return <CognitiveTestResultsContent />;
 }

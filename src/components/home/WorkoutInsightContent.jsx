@@ -1,5 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { getSessionUser } from "../../auth/auth";
+import { apiRequest, isApiBackendEnabled } from "../../lib/apiClient";
 
 const FALLBACK_AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCNeGKVRJgIPImTURVGAslzSS3ZGPZ1xwjwxmvnBO6MgCf_BcNjV1Jb4dQVUUhe2eezIrwoSJlx8y4bf3tE4mzYZ7Ob5GUGFekJ8dYQKoLn6pO04wFbneUeuijPEKJvnZIoJGeL-M2ktUWVwsSZJVp0p6H9hEYTuSXFd30ToMP9i6HpnGMb3hPgU95cjKY1BqdQXKMKQz7xSUcpPh5dxD-VMYhec9PJLins0xpetqOgFxP2RK1LxYvs18mJOZUQXWm9j8hAZlhXO0Q";
@@ -14,6 +16,36 @@ export default function WorkoutInsightContent() {
   const sessionUser = getSessionUser();
   const greetingName = sessionUser?.name?.trim().split(/\s+/)[0] || "Pengguna";
   const avatarPhoto = sessionUser?.photo || FALLBACK_AVATAR;
+
+  const [exercises, setExercises] = useState([]);
+  const [exercisesLoading, setExercisesLoading] = useState(() => isApiBackendEnabled());
+  const [exercisesError, setExercisesError] = useState("");
+
+  useEffect(() => {
+    if (!isApiBackendEnabled()) {
+      setExercisesLoading(false);
+      setExercisesError("Hubungkan app ke API (VITE_API_URL) dan pastikan tabel latihan sudah dimigrasi.");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiRequest("/exercises?limit=12&offset=0");
+        if (cancelled) return;
+        setExercises(Array.isArray(data?.exercises) ? data.exercises : []);
+        setExercisesError("");
+      } catch (e) {
+        if (!cancelled) {
+          setExercisesError(e instanceof Error ? e.message : "Gagal memuat latihan.");
+        }
+      } finally {
+        if (!cancelled) setExercisesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const performancePoints = [
     { t: "Minggu", x: 0, y: 72 },
@@ -162,29 +194,68 @@ export default function WorkoutInsightContent() {
 
         <div className="px-4 py-2">
           <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-lg font-bold leading-tight tracking-[-0.015em]">Rekomendasi Olahraga</h3>
-            <span className="text-primary text-sm font-semibold cursor-pointer">View All</span>
+            <h3 className="text-lg font-bold leading-tight tracking-[-0.015em]">Pelatihan otot</h3>
+            <Link to="/workout/exercises" className="text-primary text-sm font-semibold">
+              Lihat semua
+            </Link>
           </div>
-          <div className="flex items-stretch justify-between gap-4 rounded-xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
-            <div className="flex flex-[2_2_0px] flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <p className="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight">Tempo Run 5K</p>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Latihan pace stabil untuk meningkatkan endurance dan kontrol napas.</p>
-              </div>
-              <button className="flex min-w-[120px] items-center justify-center overflow-hidden rounded-lg h-9 px-4 bg-primary text-white gap-2 text-sm font-semibold w-fit">
-                <span className="truncate">Start Plan</span>
-                <span className="material-symbols-outlined text-base">exercise</span>
-              </button>
+          {exercisesLoading && (
+            <p className="text-sm text-slate-500 px-1 py-2">Memuat daftar latihan…</p>
+          )}
+          {!exercisesLoading && exercisesError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+              {exercisesError}
             </div>
-            <div
-              className="w-full bg-center bg-no-repeat aspect-square bg-cover rounded-xl flex-1"
-              data-alt="A runner training on a track field"
-              style={{
-                backgroundImage:
-                  'url("https://images.unsplash.com/photo-1549060279-7e168fcee0c2?auto=format&fit=crop&w=800&q=80")',
-              }}
-            />
-          </div>
+          )}
+          {!exercisesLoading && !exercisesError && exercises.length === 0 && (
+            <p className="text-sm text-slate-500 px-1">Belum ada data latihan di database.</p>
+          )}
+          {!exercisesLoading && !exercisesError && exercises.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {exercises.map((ex) => (
+                <Link
+                  key={ex.id}
+                  to={`/workout/exercise/${ex.id}`}
+                  className="flex gap-3 rounded-xl border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 active:opacity-95"
+                >
+                  <div className="min-w-0 flex-1 flex flex-col gap-2">
+                    <p className="text-slate-900 dark:text-slate-100 text-sm font-bold leading-snug">{ex.name}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(ex.targetMuscles || []).slice(0, 3).map((m) => (
+                        <span
+                          key={`${ex.id}-tm-${m.id}`}
+                          className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
+                        >
+                          {m.name}
+                        </span>
+                      ))}
+                      {(ex.bodyParts || []).slice(0, 2).map((p) => (
+                        <span
+                          key={`${ex.id}-bp-${p.id}`}
+                          className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                        >
+                          {p.name}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-primary text-xs font-semibold inline-flex items-center gap-0.5 w-fit">
+                      Detail & langkah
+                      <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                    </span>
+                  </div>
+                  {ex.gifUrl ? (
+                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-100 dark:border-slate-700">
+                      <img src={ex.gifUrl} alt="" className="h-full w-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <span className="material-symbols-outlined text-2xl">fitness_center</span>
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="px-4 py-4">

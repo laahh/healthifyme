@@ -1,11 +1,14 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { buildNutritionRows } from "../../utils/foodNutritionRows";
+import { getSessionUser } from "../../auth/auth";
+import { deleteHistoryItemFromCloud } from "../../services/supabaseDataService";
 
 const HISTORY_KEY = "health_upload_history_v1";
 
 export default function HistoryItemDetailContent() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const sessionUser = getSessionUser();
 
   let item = null;
   try {
@@ -26,6 +29,9 @@ export default function HistoryItemDetailContent() {
       localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
     } catch {
       // ignore storage issues
+    }
+    if (sessionUser?.id) {
+      deleteHistoryItemFromCloud(sessionUser.id, id).catch(() => {});
     }
     navigate("/history");
   };

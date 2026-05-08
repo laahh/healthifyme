@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
+import { getSessionUser } from "../../auth/auth";
+import { saveHistoryLocalWithCap, upsertHistoryItemToCloud } from "../../services/supabaseDataService";
 
-const HISTORY_KEY = "health_upload_history_v1";
 const TEMP_WORKOUT_KEY = "health_workout_analysis_temp_v1";
 
 function extractKcalFromString(s) {
@@ -15,45 +16,44 @@ export default function WorkoutAnalysisResultContent() {
   const navigate = useNavigate();
   const raw = localStorage.getItem(TEMP_WORKOUT_KEY);
   const data = raw ? JSON.parse(raw) : null;
+  const sessionUser = getSessionUser();
 
   const handleSave = () => {
     if (!data) return navigate("/home");
     try {
-      const oldRaw = localStorage.getItem(HISTORY_KEY);
-      const items = oldRaw ? JSON.parse(oldRaw) : [];
       const kcal =
         extractKcalFromString(data.totalKilocalories) ??
         extractKcalFromString(data.activeKilocalories) ??
         null;
-      const next = [
-        {
-          id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
-          type: "activity",
-          image: data.image || "",
-          foodName: data.activityType || "Workout",
-          activityType: data.activityType || "",
-          calories: kcal,
-          nutritionNotes: (data.summaryText || "").slice(0, 280),
-          workoutSummary: data.summaryText || "",
-          workoutMetrics: {
-            dateLine: data.dateLine || "",
-            timeRange: data.timeRange || "",
-            location: data.location || "",
-            workoutTime: data.workoutTime || "",
-            distance: data.distance || "",
-            activeKilocalories: data.activeKilocalories || "",
-            totalKilocalories: data.totalKilocalories || "",
-            elevationGain: data.elevationGain || "",
-            avgPower: data.avgPower || "",
-            avgCadence: data.avgCadence || "",
-            avgPace: data.avgPace || "",
-            avgHeartRate: data.avgHeartRate || "",
-          },
-          createdAt: data.createdAt || Date.now(),
+      const savedItem = {
+        id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        type: "activity",
+        image: data.image || "",
+        foodName: data.activityType || "Workout",
+        activityType: data.activityType || "",
+        calories: kcal,
+        nutritionNotes: (data.summaryText || "").slice(0, 280),
+        workoutSummary: data.summaryText || "",
+        workoutMetrics: {
+          dateLine: data.dateLine || "",
+          timeRange: data.timeRange || "",
+          location: data.location || "",
+          workoutTime: data.workoutTime || "",
+          distance: data.distance || "",
+          activeKilocalories: data.activeKilocalories || "",
+          totalKilocalories: data.totalKilocalories || "",
+          elevationGain: data.elevationGain || "",
+          avgPower: data.avgPower || "",
+          avgCadence: data.avgCadence || "",
+          avgPace: data.avgPace || "",
+          avgHeartRate: data.avgHeartRate || "",
         },
-        ...items,
-      ].slice(0, 100);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+        createdAt: data.createdAt || Date.now(),
+      };
+      saveHistoryLocalWithCap(savedItem, 100);
+      if (sessionUser?.id) {
+        upsertHistoryItemToCloud(sessionUser.id, savedItem).catch(() => {});
+      }
       localStorage.removeItem(TEMP_WORKOUT_KEY);
       navigate("/history");
     } catch {

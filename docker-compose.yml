@@ -1,0 +1,59 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-health_app}
+      MYSQL_USER: ${MYSQL_USER:-health}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-health}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    # Default 3307: hindari bentrok dengan MySQL yang sudah jalan di host (3306).
+    ports:
+      - "${MYSQL_PUBLISH_PORT:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: ${MYSQL_USER:-health}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-health}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-health_app}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-min-16-chars-ok}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5174}
+    # Default 8788: hindari bentrok jika 8787 sudah dipakai di host.
+    ports:
+      - "${API_PUBLISH_PORT:-8788}:8787"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8788}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-}
+        VITE_GEMINI_API_KEY: ${VITE_GEMINI_API_KEY:-}
+    ports:
+      - "${WEB_PUBLISH_PORT:-5174}:80"
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:

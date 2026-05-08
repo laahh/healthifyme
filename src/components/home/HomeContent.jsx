@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getSessionUser } from "../../auth/auth";
+import { isApiBackendEnabled } from "../../lib/apiClient";
+import { fetchGeminiFoodAnalysis } from "../../lib/foodAnalysisGemini";
+import { getGeminiApiKeyConfigError } from "../../lib/geminiEnv";
+import { hydrateUserDataFromCloud } from "../../services/supabaseDataService";
+import { parseWorkoutTimeStringToMinutes } from "../../lib/workoutDurationMinutes";
+import { buildWeekUploadCells } from "../../utils/weeklyUploadConsistency";
 
 export default function HomeContent() {
   const navigate = useNavigate();
@@ -12,6 +18,8 @@ export default function HomeContent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisResult, setAnalysisResult] = useState(null);
+  /** Memicu pembacaan ulang riwayat dari localStorage (sinkron DB). */
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
   const streamRef = useRef(null);
@@ -21,9 +29,15 @@ export default function HomeContent() {
   const TEMP_WORKOUT_KEY = "health_workout_analysis_temp_v1";
   const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
   const DAILY_CALORIE_TARGET = 2550;
+  const DAILY_ACTIVITY_MINUTES_TARGET = 60;
 
   const sessionUser = getSessionUser();
-  const greetingName = sessionUser?.name?.trim().split(/\s+/)[0] || "Pengguna";
+  const rawName = String(sessionUser?.nama || sessionUser?.name || "").trim();
+  const sidValue = String(sessionUser?.sid || sessionUser?.username || "").trim().toLowerCase();
+  const greetingName =
+    rawName && rawName.toLowerCase() !== sidValue
+      ? rawName
+      : "Pengguna";
   const avatarPhoto =
     sessionUser?.photo ||
     "https://lh3.googleusercontent.com/aida-public/AB6AXuB7uwxn84_hs7oaiFQKLbY8Y-f6y693VmByLqOGrcuA-6v64TcopIAZDvqqRbuzbrkuxM-pg1MkjTwcvsrU3tvYgiBkKItP0qtNqqx-sailK7sQv4jDejfx1_ni-xcQ-frac1FsVCI7bOn9-1fejw0U6l9C01hDLQZ6psZ2La1RnaOfkp8bI9vr2jEd_l3nE7QULFkpC3rdsEBOsNTajMnpxUadnp1jj199t_1nXryacDVai90wtEXEjWZ84YSz4vgyLw0E3pTlJD3H";
@@ -57,20 +71,59 @@ export default function HomeContent() {
     } catch {
       return [];
     }
-  }, [location.pathname, location.key, isCaptureOpen]);
+  }, [location.pathname, location.key, isCaptureOpen, historyRefresh]);
+
+  const fullHistoryItems = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [historyRefresh, location.key, location.pathname, isCaptureOpen]);
+
+  const weekUploadCells = useMemo(() => buildWeekUploadCells(fullHistoryItems), [fullHistoryItems]);
 
   /** Maksimal 3 item upload hari ini (terbaru dulu). */
   const todayHistoryItems = useMemo(() => todayHistoryAllItems.slice(0, 3), [todayHistoryAllItems]);
 
-  const todayCalories = useMemo(
-    () => todayHistoryAllItems.reduce((total, it) => total + parseCaloriesValue(it?.calories), 0),
+  /** Kkal makanan hari ini (sinkron DB → localStorage), selaras halaman nutrisi. */
+  const todayFoodCalories = useMemo(
+    () =>
+      todayHistoryAllItems.reduce(
+        (total, it) => (it?.type === "food" ? total + parseCaloriesValue(it?.calories) : total),
+        0
+      ),
     [todayHistoryAllItems]
   );
-  const todayCaloriesRounded = Math.max(0, Math.round(todayCalories));
-  const todayCalorieProgressPercentRaw = Math.max(0, Math.round((todayCaloriesRounded / DAILY_CALORIE_TARGET) * 100));
-  const todayCalorieProgressPercent = Math.min(todayCalorieProgressPercentRaw, 100);
-  const todayCalorieText = todayCaloriesRounded.toLocaleString("id-ID");
-  const isOverDailyCalorieTarget = todayCaloriesRounded > DAILY_CALORIE_TARGET;
+  const todayFoodCaloriesRounded = Math.max(0, Math.round(todayFoodCalories));
+  const todayFoodCalorieProgressPercentRaw = Math.max(
+    0,
+    Math.round((todayFoodCaloriesRounded / DAILY_CALORIE_TARGET) * 100)
+  );
+  const todayFoodCalorieProgressPercent = Math.min(todayFoodCalorieProgressPercentRaw, 100);
+  const todayFoodCalorieText = todayFoodCaloriesRounded.toLocaleString("id-ID");
+  const isOverDailyFoodCalorieTarget = todayFoodCaloriesRounded > DAILY_CALORIE_TARGET;
+
+  /** Total menit olahraga tercatat hari ini (dari riwayat type activity). */
+  const todayActivityMinutesTotal = useMemo(
+    () =>
+      todayHistoryAllItems.reduce((total, it) => {
+        if (it?.type !== "activity") return total;
+        const wt = it?.workoutMetrics?.workoutTime ?? it?.workoutTime ?? "";
+        return total + parseWorkoutTimeStringToMinutes(wt);
+      }, 0),
+    [todayHistoryAllItems]
+  );
+  const todayActivityMinutesRounded = Math.max(0, Math.round(todayActivityMinutesTotal));
+  const todayActivityProgressPercentRaw = Math.max(
+    0,
+    Math.round((todayActivityMinutesRounded / DAILY_ACTIVITY_MINUTES_TARGET) * 100)
+  );
+  const todayActivityProgressPercent = Math.min(todayActivityProgressPercentRaw, 100);
+  const todayActivityMinutesText = todayActivityMinutesRounded.toLocaleString("id-ID");
+  const isOverDailyActivityTarget = todayActivityMinutesRounded > DAILY_ACTIVITY_MINUTES_TARGET;
 
   const defaultActivityCards = [
     {
@@ -133,6 +186,27 @@ export default function HomeContent() {
       navigate("/home", { replace: true });
     }
   }, [location.search, navigate]);
+
+  useEffect(() => {
+    const bump = () => setHistoryRefresh((x) => x + 1);
+    window.addEventListener("focus", bump);
+    return () => window.removeEventListener("focus", bump);
+  }, []);
+
+  useEffect(() => {
+    if (location.pathname !== "/home") return;
+    let cancelled = false;
+    (async () => {
+      const uid = sessionUser?.id;
+      if (isApiBackendEnabled() && uid) {
+        await hydrateUserDataFromCloud(uid);
+      }
+      if (!cancelled) setHistoryRefresh((x) => x + 1);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, location.key, sessionUser?.id]);
 
   useEffect(() => {
     const openCamera = async () => {
@@ -224,59 +298,11 @@ export default function HomeContent() {
     return { mimeType: match[1], base64Data: match[2] };
   };
 
-  /** Normalisasi respons JSON analisis makanan (makro + mikro + daftar item). */
-  const normalizeFoodAnalysis = (parsed) => {
-    const num = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
-    const numOrNull = (v) => {
-      if (v === null || v === undefined || v === "") return null;
-      const n = Number(v);
-      return Number.isFinite(n) ? n : null;
-    };
-    const rawItems = parsed.items ?? parsed.foodItems ?? [];
-    const foodItems = Array.isArray(rawItems)
-      ? rawItems
-          .map((it) => {
-            const name = String(it?.name ?? it?.label ?? "").trim();
-            let detail = String(it?.detail ?? it?.portionAndCalories ?? "").trim();
-            if (!detail && (it?.portion != null || it?.calories != null)) {
-              const p = it?.portion != null ? String(it.portion) : "";
-              const c = it?.calories != null ? `${it.calories} kkal` : "";
-              detail = [p, c].filter(Boolean).join(" • ");
-            }
-            return { name, detail };
-          })
-          .filter((it) => it.name || it.detail)
-      : [];
-
-    const totalCalories = num(parsed.totalCalories ?? parsed.energyKkal ?? parsed.totalCal ?? parsed.calories);
-
-    return {
-      foodName: String(parsed.foodName || "").trim() || "Makanan tidak diketahui",
-      calories: totalCalories,
-      totalCalories,
-      energyKkal: totalCalories,
-      proteinG: numOrNull(parsed.proteinG ?? parsed.protein),
-      fatsG: numOrNull(parsed.fatsG ?? parsed.fatG ?? parsed.fats ?? parsed.lemakG),
-      carbsG: numOrNull(parsed.carbsG ?? parsed.carbohydratesG ?? parsed.carbs ?? parsed.karbohidratG),
-      fiberG: numOrNull(parsed.fiberG ?? parsed.fiber ?? parsed.seratG),
-      waterMl: numOrNull(parsed.waterMl ?? parsed.airMl ?? parsed.air),
-      vitA_RE: numOrNull(parsed.vitA_RE ?? parsed.vitA),
-      vitD_mcg: numOrNull(parsed.vitD_mcg ?? parsed.vitD),
-      vitE_mg: numOrNull(parsed.vitE_mg ?? parsed.vitE),
-      vitK_mcg: numOrNull(parsed.vitK_mcg ?? parsed.vitK),
-      vitC_mg: numOrNull(parsed.vitC_mg ?? parsed.vitC),
-      nutritionNotes: String(parsed.nutritionNotes || "").trim(),
-      foodItems,
-    };
-  };
-
   const handleAnalyzeAI = async () => {
     if (!capturedImage) return;
-    if (!GEMINI_API_KEY) {
-      setAnalysisError("API key Gemini belum diset. Tambahkan VITE_GEMINI_API_KEY di environment.");
+    const keyErr = getGeminiApiKeyConfigError(GEMINI_API_KEY);
+    if (keyErr) {
+      setAnalysisError(keyErr);
       return;
     }
 
@@ -293,8 +319,8 @@ export default function HomeContent() {
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     try {
-      const prompt = isWorkout
-        ? `Ini screenshot ringkasan olahraga dari aplikasi fitness (mis. Apple Fitness, Strava, Garmin, dll).
+      if (isWorkout) {
+        const prompt = `Ini screenshot ringkasan olahraga dari aplikasi fitness (mis. Apple Fitness, Strava, Garmin, dll).
 Baca semua teks dan angka yang terlihat di gambar (tanggal, jenis aktivitas, rentang waktu, lokasi, dan blok "Workout Details" / metrik).
 
 Balas HANYA JSON valid (tanpa markdown), dengan struktur persis:
@@ -314,93 +340,61 @@ Balas HANYA JSON valid (tanpa markdown), dengan struktur persis:
   "avgHeartRate": "string",
   "summaryText": "string multiline: salin/gabungkan informasi penting seperti contoh berikut (gunakan \\n untuk baris baru):\\nSat, 14 Feb\\nOutdoor Run\\n06.34-08.03\\n📍 Kabupaten Berau\\nWorkout Details\\nWorkout Time: 1:28:47\\nDistance: 10,06KM\\n..."
 }
-Gunakan string kosong "" jika field tidak terbaca. summaryText wajib berisi ringkasan lengkap yang bisa dibaca manusia.`
-        : `Analisis gambar makanan ini secara detail. Estimasi nutrisi untuk SELURUH piring dan daftar tiap komponen.
+Gunakan string kosong "" jika field tidak terbaca. summaryText wajib berisi ringkasan lengkap yang bisa dibaca manusia.`;
 
-Balas HANYA JSON valid (tanpa markdown), dengan struktur:
-{
-  "foodName": "judul singkat hidangan (boleh Bahasa Indonesia)",
-  "totalCalories": 1442,
-  "proteinG": 45,
-  "fatsG": 60,
-  "carbsG": 180,
-  "fiberG": 23,
-  "waterMl": 350,
-  "vitA_RE": 400,
-  "vitD_mcg": 2.5,
-  "vitE_mg": 5,
-  "vitK_mcg": 15,
-  "vitC_mg": 30,
-  "nutritionNotes": "1-2 kalimat saran konsumsi yang actionable dalam Bahasa Indonesia (contoh: kurangi gorengan/berminyak, tambah sayur, atur porsi, batasi santan/gula/garam sesuai konteks makanan)",
-  "items": [
-    { "name": "Nasi putih", "detail": "1 mangkuk • 200 kkal" },
-    { "name": "Ikan goreng", "detail": "1 porsi • 310 kkal" }
-  ]
-}
-
-Aturan:
-- totalCalories = estimasi TOTAL energi (kilokalori) seluruh makanan.
-- proteinG, fatsG, carbsG = gram; fiberG = gram; waterMl = mililiter air perkiraan dari makanan/minuman dalam gambar.
-- vitA_RE = Retinol Ekuivalen (RE); vitD_mcg, vitK_mcg, vitC_mcg, vitE_mg sesuai satuan di kunci (perkirakan jika tidak ada data pasti).
-- Gunakan null untuk angka yang benar-benar tidak bisa diperkirakan (bukan 0 sembarangan).
-- nutritionNotes WAJIB berupa saran praktis konsumsi, bukan disclaimer umum.
-- items: WAJIB gunakan Bahasa Indonesia untuk "name" dan "detail". Contoh detail: "1 sendok makan • 45 kkal" (pisahkan porsi dan kkal dengan " • ").
-- Jika komponen tidak jelas, perkirakan porsi wajar dari tampilan foto.`;
-
-      let response = null;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { text: prompt.trim() },
-                    {
-                      inline_data: {
-                        mime_type: parsedImage.mimeType,
-                        data: parsedImage.base64Data,
+        let response = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      { text: prompt.trim() },
+                      {
+                        inline_data: {
+                          mime_type: parsedImage.mimeType,
+                          data: parsedImage.base64Data,
+                        },
                       },
-                    },
-                  ],
+                    ],
+                  },
+                ],
+                generationConfig: {
+                  temperature: 0.2,
+                  responseMimeType: "application/json",
                 },
-              ],
-              generationConfig: {
-                temperature: 0.2,
-                responseMimeType: "application/json",
-              },
-            }),
-          }
-        );
+              }),
+            }
+          );
 
-        if (response.ok) break;
-        if (response.status === 429 && attempt < 2) {
-          await wait(800 * (attempt + 1));
-          continue;
+          if (response.ok) break;
+          if (response.status === 429 && attempt < 2) {
+            await wait(800 * (attempt + 1));
+            continue;
+          }
+
+          const detail = await response.text().catch(() => "");
+          const requestError = new Error(
+            `Gemini request failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`
+          );
+          requestError.status = response.status;
+          throw requestError;
         }
 
-        const detail = await response.text().catch(() => "");
-        const requestError = new Error(
-          `Gemini request failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`
-        );
-        requestError.status = response.status;
-        throw requestError;
-      }
+        if (!response || !response.ok) {
+          const fallbackError = new Error("Gemini request failed (unknown)");
+          fallbackError.status = 0;
+          throw fallbackError;
+        }
 
-      if (!response || !response.ok) {
-        const fallbackError = new Error("Gemini request failed (unknown)");
-        fallbackError.status = 0;
-        throw fallbackError;
-      }
+        const data = await response.json();
+        const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        const parsed = JSON.parse(textResult);
 
-      const data = await response.json();
-      const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      const parsed = JSON.parse(textResult);
-
-      if (isWorkout) {
         const workoutPayload = {
           type: "activity",
           image: capturedImage,
@@ -426,7 +420,7 @@ Aturan:
         return;
       }
 
-      const result = normalizeFoodAnalysis(parsed);
+      const result = await fetchGeminiFoodAnalysis(GEMINI_API_KEY, parsedImage);
 
       setAnalysisResult(result);
       localStorage.setItem(
@@ -486,20 +480,28 @@ Aturan:
 
         <section className="px-4 py-2">
           <div className="bg-primary/5 rounded-xl p-4">
-            <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider text-primary">Konsistensi Mingguan</h3>
-            <div className="flex justify-between items-center">
-              {["M", "S", "S", "R"].map((day, idx) => (
-                <div key={`${day}-${idx}`} className="flex flex-col items-center gap-2">
-                  <span className="text-xs font-medium text-slate-400">{day}</span>
-                  <div className="size-8 rounded-full bg-primary text-white flex items-center justify-center">
-                    <span className="material-symbols-outlined text-sm font-bold">check</span>
+            <h3 className="text-sm font-semibold mb-1 uppercase tracking-wider text-primary">Konsistensi Mingguan</h3>
+            {/* <p className="text-[11px] text-slate-500 mb-3">
+              Centang jika ada upload (makanan atau olahraga) di hari tersebut — data dari riwayat Anda.
+            </p> */}
+            <div className="flex justify-between items-center gap-1">
+              {weekUploadCells.map((cell) => (
+                <div key={cell.dateKey} className="flex flex-col items-center gap-2 min-w-0 flex-1">
+                  <span className="text-[10px] font-medium text-slate-400 truncate w-full text-center" title={cell.title}>
+                    {cell.label}
+                  </span>
+                  <div
+                    title={`${cell.title} · ${cell.done ? "Sudah upload" : "Belum upload"}`}
+                    className={`size-8 rounded-full shrink-0 flex items-center justify-center ${
+                      cell.done
+                        ? "bg-primary text-white"
+                        : "border-2 border-primary/30 bg-white"
+                    }`}
+                  >
+                    {cell.done ? (
+                      <span className="material-symbols-outlined text-sm font-bold leading-none">check</span>
+                    ) : null}
                   </div>
-                </div>
-              ))}
-              {["K", "J", "S"].map((day, idx) => (
-                <div key={`${day}-${idx}`} className="flex flex-col items-center gap-2">
-                  <span className="text-xs font-medium text-slate-400">{day}</span>
-                  <div className="size-8 rounded-full border-2 border-primary/30 flex items-center justify-center" />
                 </div>
               ))}
             </div>
@@ -512,38 +514,52 @@ Aturan:
               <svg className="size-full" viewBox="0 0 36 36">
                 <path className="text-slate-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="100, 100" strokeWidth="3" />
                 <path
-                  className={isOverDailyCalorieTarget ? "text-amber-500" : "text-primary"}
+                  className={isOverDailyFoodCalorieTarget ? "text-amber-500" : "text-primary"}
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   fill="none"
                   stroke="currentColor"
-                  strokeDasharray={`${todayCalorieProgressPercent}, 100`}
+                  strokeDasharray={`${todayFoodCalorieProgressPercent}, 100`}
                   strokeLinecap="round"
                   strokeWidth="3"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-lg font-bold">{todayCalorieText}</span>
+                <span className="text-lg font-bold">{todayFoodCalorieText}</span>
                 <span className="text-[10px] text-slate-400">kkal</span>
               </div>
             </div>
             <p className="text-sm font-bold">Nutrisi Hari Ini</p>
-            <p className="text-xs text-center text-slate-500">{todayCalorieProgressPercentRaw}% dari target <br></br> {DAILY_CALORIE_TARGET.toLocaleString("id-ID")} kkal</p>
+            <p className="text-xs text-center text-slate-500">
+              {todayFoodCalorieProgressPercentRaw}% dari target <br /> {DAILY_CALORIE_TARGET.toLocaleString("id-ID")} kkal
+            </p>
           </Link>
-          <div className="bg-white border border-slate-100 p-4 rounded-xl flex flex-col items-center shadow-sm">
+          <Link
+            to="/workout/insight"
+            className="bg-white border border-slate-100 p-4 rounded-xl flex flex-col items-center shadow-sm active:scale-[0.99] transition-transform"
+          >
             <div className="relative size-24 mb-3">
               <svg className="size-full" viewBox="0 0 36 36">
                 <path className="text-slate-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="100, 100" strokeWidth="3" />
-                <path className="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="50, 100" strokeLinecap="round" strokeWidth="3" />
+                <path
+                  className={isOverDailyActivityTarget ? "text-amber-500" : "text-primary"}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeDasharray={`${todayActivityProgressPercent}, 100`}
+                  strokeLinecap="round"
+                  strokeWidth="3"
+                />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-lg font-bold">30</span>
-                {/* <span className="material-symbols-outlined text-primary text-sm">steps</span> */}
-                <p className="text-xs text-slate-500">Menit</p>
+                <span className="text-lg font-bold">{todayActivityMinutesText}</span>
+                <p className="text-[10px] text-slate-400">Menit</p>
               </div>
             </div>
             <p className="text-sm font-bold">Olahraga Hari Ini</p>
-            <p className="text-xs text-center text-slate-500">50% dari target <br></br> 60 Menit</p>
-          </div>
+            <p className="text-xs text-center text-slate-500">
+              {todayActivityProgressPercentRaw}% dari target <br /> {DAILY_ACTIVITY_MINUTES_TARGET.toLocaleString("id-ID")} menit
+            </p>
+          </Link>
         </section>
 
         <section className="px-4 py-2">

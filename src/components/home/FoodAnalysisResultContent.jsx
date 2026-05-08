@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { buildNutritionRows } from "../../utils/foodNutritionRows";
 import { getSessionUser } from "../../auth/auth";
+import { saveHistoryLocalWithCap, upsertHistoryItemToCloud } from "../../services/supabaseDataService";
 
 const HISTORY_KEY = "health_upload_history_v1";
 const TEMP_ANALYSIS_KEY = "health_food_analysis_temp_v1";
@@ -213,7 +214,11 @@ export default function FoodAnalysisResultContent() {
         },
         ...itemsHist,
       ].slice(0, 100);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      const savedItem = next[0];
+      saveHistoryLocalWithCap(savedItem, 100);
+      if (sessionUser?.id) {
+        upsertHistoryItemToCloud(sessionUser.id, savedItem).catch(() => {});
+      }
       localStorage.removeItem(TEMP_ANALYSIS_KEY);
       navigate("/history");
     } catch {

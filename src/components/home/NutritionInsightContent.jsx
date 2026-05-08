@@ -22,7 +22,12 @@ export default function NutritionInsightContent() {
     `flex flex-col items-center gap-1 ${isNavActive(path) ? "text-primary" : "text-slate-400"}`;
   const navLabelClass = (path) => `text-[10px] ${isNavActive(path) ? "font-bold" : "font-medium"}`;
   const sessionUser = getSessionUser();
-  const greetingName = sessionUser?.name?.trim().split(/\s+/)[0] || "Pengguna";
+  const rawName = String(sessionUser?.nama || sessionUser?.name || "").trim();
+  const sidValue = String(sessionUser?.sid || sessionUser?.username || "").trim().toLowerCase();
+  const greetingName =
+    rawName && rawName.toLowerCase() !== sidValue
+      ? rawName
+      : "Pengguna";
   const avatarPhoto = sessionUser?.photo || FALLBACK_AVATAR;
 
   const glucosePoints = [

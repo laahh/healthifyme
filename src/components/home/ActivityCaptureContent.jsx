@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { fetchGeminiFoodAnalysis } from "../../lib/foodAnalysisGemini";
+import { getGeminiApiKeyConfigError } from "../../lib/geminiEnv";
 
-const HISTORY_KEY = "health_upload_history_v1";
 const TEMP_ANALYSIS_KEY = "health_food_analysis_temp_v1";
 
 export default function ActivityCaptureContent() {
@@ -15,25 +16,6 @@ export default function ActivityCaptureContent() {
   const fileInputRef = useRef(null);
   const streamRef = useRef(null);
   const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-
-  const addHistoryItem = (type, imageDataUrl) => {
-    try {
-      const raw = localStorage.getItem(HISTORY_KEY);
-      const items = raw ? JSON.parse(raw) : [];
-      const next = [
-        {
-          id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
-          type,
-          image: imageDataUrl,
-          createdAt: Date.now(),
-        },
-        ...items,
-      ].slice(0, 100);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-    } catch {
-      // ignore storage errors
-    }
-  };
 
   useEffect(() => {
     const openCamera = async () => {
@@ -112,8 +94,9 @@ export default function ActivityCaptureContent() {
 
   const handleAnalyzeAI = async () => {
     if (!capturedImage) return;
-    if (!GEMINI_API_KEY) {
-      setAnalysisError("API key Gemini belum diset. Tambahkan VITE_GEMINI_API_KEY di environment.");
+    const keyErr = getGeminiApiKeyConfigError(GEMINI_API_KEY);
+    if (keyErr) {
+      setAnalysisError(keyErr);
       return;
     }
 
@@ -126,49 +109,8 @@ export default function ActivityCaptureContent() {
     setIsAnalyzing(true);
     setAnalysisError("");
     try {
-      const prompt = `
-Analisis gambar makanan ini.
-Balas HANYA dalam format JSON valid seperti:
-{"foodName":"Nama makanan","calories":123,"nutritionNotes":"catatan singkat"}
-Tanpa markdown, tanpa teks tambahan.
-`;
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: prompt.trim() },
-                  {
-                    inline_data: {
-                      mime_type: parsedImage.mimeType,
-                      data: parsedImage.base64Data,
-                    },
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: "application/json",
-            },
-          }),
-        }
-      );
-      if (!response.ok) throw new Error(`Gemini request failed (${response.status})`);
-      const data = await response.json();
-      const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      const parsed = JSON.parse(textResult);
-      const result = {
-        foodName: parsed.foodName || "Makanan tidak diketahui",
-        calories: Number.isFinite(Number(parsed.calories)) ? Number(parsed.calories) : 0,
-        nutritionNotes: parsed.nutritionNotes || "",
-      };
+      const result = await fetchGeminiFoodAnalysis(GEMINI_API_KEY, parsedImage);
 
-      // Keep behavior same as HomeContent flow.
       localStorage.setItem(
         TEMP_ANALYSIS_KEY,
         JSON.stringify({
@@ -181,7 +123,12 @@ Tanpa markdown, tanpa teks tambahan.
       navigate("/food-analysis/result");
     } catch (error) {
       console.error("AI analyze failed:", error);
-      setAnalysisError("Gagal analisis AI. Coba lagi.");
+      const status = Number(error?.status);
+      if (status === 429) {
+        setAnalysisError("Kuota Gemini sedang penuh (429). Tunggu sebentar lalu coba lagi, atau cek quota/billing API key.");
+      } else {
+        setAnalysisError("Gagal analisis AI. Coba lagi.");
+      }
     } finally {
       setIsAnalyzing(false);
     }
