@@ -32,8 +32,19 @@ function Badge({ ok, children }) {
   );
 }
 
+function participantIdentityFromSession(sessionUser) {
+  const sid = String(sessionUser?.sid || sessionUser?.username || "").trim();
+  const rawName = String(sessionUser?.nama || sessionUser?.name || "").trim();
+  const sidLower = sid.toLowerCase();
+  const name = rawName && rawName.toLowerCase() !== sidLower ? rawName : sid || "—";
+  const company = String(sessionUser?.company || "").trim() || "—";
+  return { sid: sid || "—", name, company };
+}
+
 export default function CognitiveTestSessionContent() {
-  const userKey = getCognitiveUserKey(getSessionUser());
+  const sessionUser = getSessionUser();
+  const participant = participantIdentityFromSession(sessionUser);
+  const userKey = getCognitiveUserKey(sessionUser);
   const [sessionId, setSessionId] = useState(newSessionId);
   const [step, setStep] = useState("landing");
 
@@ -42,6 +53,7 @@ export default function CognitiveTestSessionContent() {
   const [memRaw, setMemRaw] = useState(null);
   const [memEval, setMemEval] = useState(null);
   const [overall, setOverall] = useState(null);
+  const [summaryCompletedAt, setSummaryCompletedAt] = useState(null);
 
   const pvtEvalRef = useRef(null);
   const pvtRawRef = useRef(null);
@@ -53,6 +65,14 @@ export default function CognitiveTestSessionContent() {
   useEffect(() => {
     if (pvtRaw) pvtRawRef.current = pvtRaw;
   }, [pvtRaw]);
+
+  useEffect(() => {
+    if (step === "summary") {
+      setSummaryCompletedAt((prev) => prev ?? new Date());
+    } else {
+      setSummaryCompletedAt(null);
+    }
+  }, [step]);
 
   const resetFlow = useCallback(() => {
     setSessionId(newSessionId());
@@ -253,6 +273,45 @@ export default function CognitiveTestSessionContent() {
 
         {step === "summary" && memRaw && memEval && overall && (
           <div className="space-y-5">
+            <div className="rounded-2xl border border-primary/25 bg-surface-container-lowest p-4 shadow-sm">
+              <div className="mb-3 flex items-start gap-2">
+                <span className="material-symbols-outlined shrink-0 text-primary text-xl">badge</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Identitas peserta</p>
+                  {/* <p className="mt-0.5 text-[10px] leading-relaxed text-on-surface-variant/80">
+                    Hasil terikat akun login ini. Tangkapan layar tanpa blok ini tidak dapat diverifikasi.
+                  </p> */}
+                </div>
+              </div>
+              <dl className="grid gap-2.5 text-sm">
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Nama</dt>
+                  <dd className="font-bold leading-snug text-on-surface">{participant.name}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">SID</dt>
+                  <dd className="font-mono text-sm font-bold tracking-wide text-on-surface">{participant.sid}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Perusahaan</dt>
+                  <dd className="font-semibold leading-snug text-on-surface">{participant.company}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Waktu tes</dt>
+                  <dd className="text-xs text-on-surface-variant">
+                    {(summaryCompletedAt ?? new Date()).toLocaleString("id-ID", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
             <div className={`rounded-2xl border-2 p-5 ${overallCardClass}`}>
               <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Kesimpulan skrining</p>
               <h2 className="mb-2 font-headline text-lg font-bold leading-snug">{overall.title}</h2>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getSession } from "../auth/auth";
 import ActivityRunDetailContent from "../components/home/ActivityRunDetailContent";
-import ActivityCaptureContent from "../components/home/ActivityCaptureContent";
+import GoalPlannerContent from "../components/home/GoalPlannerContent";
 import FoodAnalysisResultContent from "../components/home/FoodAnalysisResultContent";
 import WorkoutAnalysisResultContent from "../components/home/WorkoutAnalysisResultContent";
 import HistoryItemDetailContent from "../components/home/HistoryItemDetailContent";
@@ -208,7 +208,7 @@ export function ActivityRunPage() {
 }
 
 export function ActivityCapturePage() {
-  return <ActivityCaptureContent />;
+  return <GoalPlannerContent />;
 }
 
 export function FoodAnalysisResultPage() {

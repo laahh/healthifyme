@@ -1,7 +1,15 @@
 import { Link, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSessionUser } from "../../auth/auth";
 import { apiRequest, isApiBackendEnabled } from "../../lib/apiClient";
+
+function localTodayYmd() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 const FALLBACK_AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCNeGKVRJgIPImTURVGAslzSS3ZGPZ1xwjwxmvnBO6MgCf_BcNjV1Jb4dQVUUhe2eezIrwoSJlx8y4bf3tE4mzYZ7Ob5GUGFekJ8dYQKoLn6pO04wFbneUeuijPEKJvnZIoJGeL-M2ktUWVwsSZJVp0p6H9hEYTuSXFd30ToMP9i6HpnGMb3hPgU95cjKY1BqdQXKMKQz7xSUcpPh5dxD-VMYhec9PJLins0xpetqOgFxP2RK1LxYvs18mJOZUQXWm9j8hAZlhXO0Q";
@@ -20,6 +28,9 @@ export default function WorkoutInsightContent() {
   const [exercises, setExercises] = useState([]);
   const [exercisesLoading, setExercisesLoading] = useState(() => isApiBackendEnabled());
   const [exercisesError, setExercisesError] = useState("");
+  const [weeklySummary, setWeeklySummary] = useState(null);
+  const [weeklyLoading, setWeeklyLoading] = useState(() => isApiBackendEnabled());
+  const [weeklyError, setWeeklyError] = useState("");
 
   useEffect(() => {
     if (!isApiBackendEnabled()) {
@@ -47,16 +58,115 @@ export default function WorkoutInsightContent() {
     };
   }, []);
 
-  const performancePoints = [
-    { t: "Minggu", x: 0, y: 72 },
-    { t: "Sabtu", x: 52, y: 66 },
-    { t: "Jumat", x: 103, y: 42 },
-    { t: "Kamis", x: 155, y: 30 },
-    { t: "Rabu", x: 207, y: 40 },
-    { t: "Selasa", x: 258, y: 35 },
-    { t: "Senin", x: 310, y: 52 },
-  ];
-  const performancePath = performancePoints.map((p) => `${p.x},${p.y}`).join(" ");
+  useEffect(() => {
+    if (!isApiBackendEnabled()) {
+      setWeeklyLoading(false);
+      setWeeklyError("");
+      setWeeklySummary(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setWeeklyLoading(true);
+      setWeeklyError("");
+      try {
+        const date = localTodayYmd();
+        const data = await apiRequest(`/me/workouts/weekly-summary?date=${encodeURIComponent(date)}`);
+        if (!cancelled) {
+          setWeeklySummary(data);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setWeeklySummary(null);
+          setWeeklyError(e instanceof Error ? e.message : "Gagal memuat ringkasan mingguan.");
+        }
+      } finally {
+        if (!cancelled) setWeeklyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const chartPoints = useMemo(() => {
+    const days = weeklySummary?.days;
+    if (!Array.isArray(days) || days.length !== 7) return [];
+    const maxDur = Math.max(1, ...days.map((d) => Number(d.duration_min) || 0));
+    return days.map((d, i) => {
+      const dur = Number(d.duration_min) || 0;
+      const x = (i / 6) * 310;
+      const y = 76 - (dur / maxDur) * 48;
+      const yClamped = Math.max(28, Math.min(76, y));
+      return {
+        ...d,
+        x,
+        y: dur === 0 ? 76 : yClamped,
+      };
+    });
+  }, [weeklySummary]);
+
+  const performancePath = useMemo(() => chartPoints.map((p) => `${p.x},${p.y}`).join(" "), [chartPoints]);
+
+  const highlightPoint = useMemo(() => {
+    if (!chartPoints.length) return null;
+    const today = localTodayYmd();
+    const onToday = chartPoints.find((p) => p.date === today);
+    if (onToday) return onToday;
+    let best = chartPoints[0];
+    for (const p of chartPoints) {
+      if ((p.duration_min || 0) > (best.duration_min || 0)) best = p;
+    }
+    return best;
+  }, [chartPoints]);
+
+  const weekRangeLabel = weeklySummary
+    ? `${weeklySummary.week_start} – ${weeklySummary.week_end}`
+    : "";
+  const totalKcal = weeklySummary?.totals?.calories_kcal ?? 0;
+  const avgBpm = weeklySummary?.avg_heart_rate_week;
+  const avgMinDay = weeklySummary?.avg_minutes_per_day ?? 0;
+
+  const todayWorkout = useMemo(() => {
+    const today = localTodayYmd();
+    return weeklySummary?.days?.find((d) => d.date === today) ?? null;
+  }, [weeklySummary]);
+
+  const todayMinutes = Math.round(Number(todayWorkout?.duration_min) || 0);
+  const todayHasActivity = todayMinutes > 0 || (Number(todayWorkout?.calories_kcal) || 0) > 0;
+
+  const todayDetailItems = useMemo(() => {
+    const weekSess = weeklySummary?.totals?.sessions ?? 0;
+    const kcal = Math.round(Number(todayWorkout?.calories_kcal) || 0);
+    const maxHr = todayWorkout?.max_heart_rate;
+    const avgHr = todayWorkout?.avg_heart_rate;
+    return [
+      {
+        label: "Total Kalori",
+        value: kcal,
+        pct: Math.min(100, Math.round((kcal / 600) * 100)),
+        color: "bg-blue-500",
+      },
+      {
+        label: "Maks Denyut Nadi",
+        value: maxHr != null ? maxHr : "—",
+        pct: maxHr != null ? Math.min(100, Math.round((maxHr / 200) * 100)) : 0,
+        color: "bg-violet-500",
+      },
+      {
+        label: "Freq dalam minggu",
+        value: weekSess,
+        pct: Math.min(100, Math.round((weekSess / 10) * 100)),
+        color: "bg-amber-500",
+      },
+      {
+        label: "Rata-rata Denyut Nadi",
+        value: avgHr != null ? avgHr : "—",
+        pct: avgHr != null ? Math.min(100, Math.round((avgHr / 200) * 100)) : 0,
+        color: "bg-emerald-500",
+      },
+    ];
+  }, [weeklySummary, todayWorkout]);
 
   return (
     <div className="font-['Public_Sans'] bg-background-light text-slate-900 min-h-screen dark:bg-background-dark dark:text-slate-100">
@@ -86,13 +196,21 @@ export default function WorkoutInsightContent() {
               </div>
               <div className="flex flex-col items-center justify-center">
                 <p className="text-[24px] font-bold leading-tight tracking-tight text-center">Keren, {greetingName}!</p>
-                <p className="text-slate-600 dark:text-slate-400 text-base font-normal leading-normal text-center mt-1">Performa olahraga kamu stabil dan meningkat.</p>
-                <div className="flex gap-3 mt-3 items-center">
-                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-base">local_fire_department</span> 637 kcal
+                <p className="text-slate-600 dark:text-slate-400 text-base font-normal leading-normal text-center mt-1">
+                  {weeklyLoading
+                    ? "Memuat data minggu ini…"
+                    : weeklySummary?.totals?.sessions
+                      ? `${weeklySummary.totals.sessions} sesi olahraga tercatat minggu ini (Senin–Minggu).`
+                      : "Belum ada sesi olahraga di minggu ini. Upload hasil latihan untuk melihat ringkasan."}
+                </p>
+                <div className="flex flex-wrap gap-3 mt-3 items-center justify-center">
+                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1 tabular-nums">
+                    <span className="material-symbols-outlined text-base">local_fire_department</span>
+                    {weeklyLoading ? "…" : `${Math.round(Number(totalKcal) || 0)} kkal`}
                   </span>
-                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-base">favorite</span> 188 avg BPM
+                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1 tabular-nums">
+                    <span className="material-symbols-outlined text-base">favorite</span>
+                    {weeklyLoading ? "…" : avgBpm != null ? `${avgBpm} avg BPM` : "BPM —"}
                   </span>
                 </div>
               </div>
@@ -108,40 +226,70 @@ export default function WorkoutInsightContent() {
           <div className="rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold">Ringkasan Olahraga Mingguan</h3>
-              <span className="material-symbols-outlined text-slate-400 text-[18px]">info</span>
+              {/* <span className="text-[10px] text-slate-400 font-medium tabular-nums">{weekRangeLabel}</span> */}
             </div>
+            {weeklyError && (
+              <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">{weeklyError}</p>
+            )}
             <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
-              <svg viewBox="0 0 310 88" className="w-full h-24">
-                <defs>
-                  <linearGradient id="workoutLine" x1="0%" x2="100%" y1="0%" y2="0%">
-                    <stop offset="0%" stopColor="#22c55e" />
-                    <stop offset="50%" stopColor="#0ea5e9" />
-                    <stop offset="100%" stopColor="#8b5cf6" />
-                  </linearGradient>
-                </defs>
-                <polyline fill="none" stroke="#e5e7eb" strokeWidth="1.5" points="0,76 310,76" />
-                <polyline fill="none" stroke="url(#workoutLine)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" points={performancePath} />
-                <circle cx={310} cy={52} r="4.5" fill="#111827" />
-              </svg>
-              <div className="grid grid-cols-7 text-[10px] text-slate-400 mt-1">
-                {performancePoints.map((point) => (
-                  <span key={point.t} className="text-center">
-                    {point.t}
-                  </span>
-                ))}
-              </div>
+              {weeklyLoading ? (
+                <div className="h-24 flex items-center justify-center text-sm text-slate-500">Memuat grafik…</div>
+              ) : !isApiBackendEnabled() ? (
+                <div className="h-24 flex items-center justify-center text-xs text-slate-500 text-center px-2">
+                  Set VITE_API_URL untuk ringkasan dari database.
+                </div>
+              ) : (
+                <>
+                  <svg viewBox="0 0 310 88" className="w-full h-24">
+                    <defs>
+                      <linearGradient id="workoutLine" x1="0%" x2="100%" y1="0%" y2="0%">
+                        <stop offset="0%" stopColor="#22c55e" />
+                        <stop offset="50%" stopColor="#0ea5e9" />
+                        <stop offset="100%" stopColor="#8b5cf6" />
+                      </linearGradient>
+                    </defs>
+                    <polyline fill="none" stroke="#e5e7eb" strokeWidth="1.5" points="0,76 310,76" />
+                    {chartPoints.length > 0 && (
+                      <polyline
+                        fill="none"
+                        stroke="url(#workoutLine)"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        points={performancePath}
+                      />
+                    )}
+                    {highlightPoint && (
+                      <circle cx={highlightPoint.x} cy={highlightPoint.y} r="4.5" fill="#111827" className="dark:fill-white" />
+                    )}
+                  </svg>
+                  <div className="grid grid-cols-7 text-[10px] text-slate-400 mt-1 gap-0.5">
+                    {chartPoints.map((point) => (
+                      <span key={point.date} className="text-center truncate" title={`${point.date}: ${point.duration_min} menit`}>
+                        {point.label}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-2xl font-bold leading-none">45</p>
-                <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
-                Menit/Hari (Rata-rata)
-                  <span className="text-green-500 font-semibold">+40%</span>
+                <p className="text-2xl font-bold leading-none tabular-nums">
+                  {weeklyLoading ? "…" : avgMinDay}
                 </p>
+                <p className="text-[11px] text-slate-500 mt-1">Menit/hari (rata-rata, 7 hari)</p>
               </div>
-              <button className="h-9 px-4 rounded-full bg-black text-white text-sm font-semibold">Start</button>
+              <Link
+                to="/activity/capture"
+                className="h-9 px-4 rounded-full bg-black text-white text-sm font-semibold inline-flex items-center justify-center dark:bg-white dark:text-black"
+              >
+                Goal
+              </Link>
             </div>
-            <p className="text-[10px] text-slate-400 mt-2">Last synced Today, 10:38 AM</p>
+            <p className="text-[10px] text-slate-400 mt-2">
+              Sumber: workout_analyses • Minggu Senin–Minggu (WIB sesuai server)
+            </p>
           </div>
         </div>
 
@@ -149,45 +297,64 @@ export default function WorkoutInsightContent() {
           <div className="rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold">Ringkasan Olahraga Hari ini</h3>
-              <span className="material-symbols-outlined text-slate-400 text-[18px]">info</span>
+              <span className="text-[10px] text-slate-400 font-medium tabular-nums">{localTodayYmd()}</span>
             </div>
             <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="size-11 rounded-full border-2 border-emerald-200 flex items-center justify-center text-emerald-500">
-                    <span className="material-symbols-outlined">check</span>
+                  <div
+                    className={`size-11 rounded-full border-2 flex items-center justify-center ${
+                      todayHasActivity ? "border-emerald-200 text-emerald-500" : "border-slate-200 text-slate-400"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined">
+                      {todayHasActivity ? "check" : "fitness_center"}
+                    </span>
                   </div>
                   <div>
-                    <p className="text-sm font-bold">30 Menit</p>
-                    <p className="text-[11px] text-slate-500">Hari ini</p>
+                    <p className="text-sm font-bold tabular-nums">
+                      {weeklyLoading ? "…" : `${todayMinutes} Menit`}
+                    </p>
+                    <p className="text-[11px] text-slate-500">Hari ini (workout_analyses)</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button className="size-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <button
+                    type="button"
+                    className="size-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"
+                    aria-label="Notifikasi"
+                  >
                     <span className="material-symbols-outlined text-[16px]">notifications</span>
                   </button>
-                  <button className="size-7 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                  <Link
+                    to="/activity/capture"
+                    className="size-7 rounded-full bg-emerald-600 text-white flex items-center justify-center"
+                    aria-label="Tambah goal"
+                  >
                     <span className="material-symbols-outlined text-[16px]">add</span>
-                  </button>
+                  </Link>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold">
-                {[
-                  { label: "Total Kalori", pct: 350, color: "bg-blue-500" },
-                  { label: "Maks Denyut Nadi", pct: 160, color: "bg-violet-500" },
-                  { label: "Freq dalam minggu", pct: 4, color: "bg-amber-500" },
-                  { label: "Rata-rata Denyut Nadi", pct: 155, color: "bg-emerald-500" },
-                ].map((item) => (
-                  <div key={item.label}>
-                    <div className="flex justify-between mb-1">
-                      <span>{item.label}: {item.pct}</span>
+              {!isApiBackendEnabled() ? (
+                <p className="mt-3 text-[10px] text-slate-500">Set VITE_API_URL untuk data harian dari database.</p>
+              ) : weeklyError ? (
+                <p className="mt-3 text-[10px] text-amber-600 dark:text-amber-400">{weeklyError}</p>
+              ) : (
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold">
+                  {todayDetailItems.map((item) => (
+                    <div key={item.label}>
+                      <div className="flex justify-between mb-1 gap-1">
+                        <span className="leading-tight">
+                          {item.label}: {item.value}
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full bg-slate-200 overflow-hidden">
+                        <div className={`${item.color} h-full`} style={{ width: `${Math.min(item.pct, 100)}%` }} />
+                      </div>
                     </div>
-                    <div className="h-1 rounded-full bg-slate-200 overflow-hidden">
-                      <div className={`${item.color} h-full`} style={{ width: `${Math.min(item.pct, 100)}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

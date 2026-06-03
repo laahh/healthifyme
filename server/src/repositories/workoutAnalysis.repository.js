@@ -1,3 +1,4 @@
+import { getPool } from "../config/database.js";
 import { parseBigIntId } from "./sqlBigInt.js";
 
 /**
@@ -189,4 +190,23 @@ export async function syncWorkoutAnalysisFromHistoryPayload(conn, userId, client
       }
     );
   }
+}
+
+/**
+ * @param {string} userId
+ * @param {string} startDate YYYY-MM-DD
+ * @param {string} endDate YYYY-MM-DD
+ */
+export async function listWorkoutAnalysesInDateRange(userId, startDate, endDate) {
+  const uid = parseBigIntId(userId);
+  if (uid == null) return [];
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT DATE(created_at) AS d, workout_time, calories_kcal, avg_heart_rate, activity_type, created_at
+     FROM workout_analyses
+     WHERE user_id = :uid AND DATE(created_at) >= :start AND DATE(created_at) <= :end
+     ORDER BY created_at ASC`,
+    { uid, start: startDate, end: endDate }
+  );
+  return Array.isArray(rows) ? rows : [];
 }

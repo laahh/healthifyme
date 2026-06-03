@@ -1,7 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getSessionUser, logout, mergeSessionUser } from "../../auth/auth";
+import { apiRequest, isApiBackendEnabled } from "../../lib/apiClient";
 import { upsertProfileToCloud } from "../../services/supabaseDataService";
+
+function localTodayYmd() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 const FALLBACK_AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuB7uwxn84_hs7oaiFQKLbY8Y-f6y693VmByLqOGrcuA-6v64TcopIAZDvqqRbuzbrkuxM-pg1MkjTwcvsrU3tvYgiBkKItP0qtNqqx-sailK7sQv4jDejfx1_ni-xcQ-frac1FsVCI7bOn9-1fejw0U6l9C01hDLQZ6psZ2La1RnaOfkp8bI9vr2jEd_l3nE7QULFkpC3rdsEBOsNTajMnpxUadnp1jj199t_1nXryacDVai90wtEXEjWZ84YSz4vgyLw0E3pTlJD3H";
@@ -17,6 +26,8 @@ export default function ProfileContent() {
   const [, setSessionTick] = useState(0);
   const [activeMenu, setActiveMenu] = useState(null); // null | profile | address | orders | mcu
   const [query, setQuery] = useState("");
+  /** @type {{ loading: boolean, data: object | null, error: string | null }} */
+  const [goalDashboard, setGoalDashboard] = useState({ loading: false, data: null, error: null });
 
   const [profile, setProfile] = useState(() => {
     const u = getSessionUser();
@@ -39,6 +50,29 @@ export default function ProfileContent() {
   });
 
   const user = getSessionUser();
+
+  useEffect(() => {
+    if (currentPath !== "/profile" || !user?.id || !isApiBackendEnabled()) {
+      setGoalDashboard((s) => ({ ...s, loading: false, data: null, error: null }));
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setGoalDashboard({ loading: true, data: null, error: null });
+      try {
+        const date = localTodayYmd();
+        const data = await apiRequest(`/me/goals/dashboard?date=${encodeURIComponent(date)}`);
+        if (!cancelled) setGoalDashboard({ loading: false, data, error: null });
+      } catch (e) {
+        if (!cancelled) {
+          setGoalDashboard({ loading: false, data: null, error: e?.message || "Gagal memuat goal" });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPath, user?.id]);
 
   const orders = useMemo(() => {
     try {
@@ -96,6 +130,71 @@ export default function ProfileContent() {
   const photoUrl = user?.photo || FALLBACK_AVATAR;
   const tier = user?.jabatanFungsional || user?.jabatan_fungsional || "MEMBER";
   const stats = user?.stats || { foodUploads: 0, activityUploads: 0, coupons: 0 };
+
+  const profileStats = useMemo(() => {
+    const dash = goalDashboard.data;
+    const tgt = dash?.daily_target;
+    const act = dash?.actuals;
+    const score = dash?.score;
+    const hasGoal = Boolean(dash?.active_goal && tgt);
+
+    let caloriePct = null;
+    if (hasGoal && Number(tgt.calorie_target) > 0 && act) {
+      caloriePct = Math.min(100, Math.round((Number(act.calorie || 0) / Number(tgt.calorie_target)) * 100));
+    }
+
+    let exercisePct = null;
+    if (hasGoal && Number(tgt.exercise_duration_target_min) > 0 && act) {
+      exercisePct = Math.min(
+        100,
+        Math.round((Number(act.exercise_min || 0) / Number(tgt.exercise_duration_target_min)) * 100)
+      );
+    }
+
+    const calorieTargetKcal = hasGoal && tgt?.calorie_target != null ? Math.round(Number(tgt.calorie_target)) : null;
+    const healthScore = score?.total_score != null && hasGoal ? Math.round(Number(score.total_score)) : null;
+
+    const loading = goalDashboard.loading;
+    const col1 =
+      loading ? "…" : hasGoal && caloriePct != null ? `${caloriePct}%` : `${stats.foodUploads}`;
+    const col1Label = hasGoal ? "Capaian kalori hari ini" : "Upload makanan";
+    const col2 =
+      loading ? "…" : hasGoal && exercisePct != null ? `${exercisePct}%` : `${stats.activityUploads}`;
+    const col2Label = hasGoal ? "Capaian olahraga" : "Upload olahraga";
+    let col3 = "—";
+    let col3Label = "Coupons";
+    if (loading) {
+      col3 = "…";
+      col3Label = "Memuat…";
+    } else if (hasGoal && calorieTargetKcal != null) {
+      col3 = `${calorieTargetKcal}`;
+      col3Label = "Target kkal hari ini";
+    } else if (hasGoal && healthScore != null) {
+      col3 = `${healthScore}`;
+      col3Label = "Skor kesehatan hari ini";
+    } else if (!hasGoal) {
+      col3 = `${stats.coupons}`;
+      col3Label = "Coupons";
+    }
+
+    return {
+      hasGoal,
+      loading,
+      caloriePct,
+      exercisePct,
+      calorieTargetKcal,
+      healthScore,
+      fallbackFood: stats.foodUploads,
+      fallbackActivity: stats.activityUploads,
+      col1,
+      col1Label,
+      col2,
+      col2Label,
+      col3,
+      col3Label,
+    };
+  }, [goalDashboard.data, goalDashboard.loading, stats.foodUploads, stats.activityUploads, stats.coupons]);
+
   const mcu = user?.mcu;
   const mcuEntries = useMemo(() => {
     if (!mcu || typeof mcu !== "object") return [];
@@ -302,18 +401,29 @@ export default function ProfileContent() {
                     </span>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-8 mt-8 w-full border-t border-outline-variant/10 pt-6">
+                <div className="grid grid-cols-3 gap-6 sm:gap-8 mt-8 w-full border-t border-outline-variant/10 pt-6">
                   <div>
-                    <p className="text-sm font-semibold text-on-surface">75%</p>
-                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">Score kkal makanan</p>
+                    <p className="text-sm font-semibold text-on-surface tabular-nums">{profileStats.col1}</p>
+                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium leading-tight">
+                      {profileStats.col1Label}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-on-surface">50%</p>
-                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">⁠⁠score olahraga</p>
+                    <p className="text-sm font-semibold text-on-surface tabular-nums">{profileStats.col2}</p>
+                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium leading-tight">
+                      {profileStats.col2Label}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-on-surface">{stats.coupons}</p>
-                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">Coupons</p>
+                    <p className="text-sm font-semibold text-on-surface tabular-nums">
+                      {profileStats.col3}
+                      {profileStats.hasGoal && profileStats.calorieTargetKcal != null && !profileStats.loading ? (
+                        <span className="text-[10px] font-bold text-on-surface-variant normal-case tracking-normal"> kkal</span>
+                      ) : null}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium leading-tight">
+                      {profileStats.col3Label}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -453,7 +563,7 @@ export default function ProfileContent() {
               </div>
             </section>
 
-            <p className="text-center text-[10px] text-on-surface-variant/40 font-medium uppercase tracking-[0.3em] mt-12 mb-8">Well v2.4.1 (Emerald)</p>
+            <p className="text-center text-[10px] text-on-surface-variant/40 font-medium uppercase tracking-[0.3em] mt-12 mb-8">© OHS Division • 2026</p>
           </>
         )}
       </main>

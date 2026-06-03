@@ -92,6 +92,13 @@ export async function getSyncPayload(requestUserId, targetUserId) {
         phone: profile.phone ?? "",
         email: profile.email ?? "",
         address: profile.address ?? null,
+        gender: profile.gender ?? null,
+        height_cm: profile.height_cm ?? null,
+        weight_kg: profile.weight_kg ?? null,
+        activity_level: profile.activity_level ?? null,
+        exercise_preferences: profile.exercise_preferences ?? null,
+        food_restrictions: profile.food_restrictions ?? null,
+        timezone: profile.timezone ?? null,
       }
     : null;
 

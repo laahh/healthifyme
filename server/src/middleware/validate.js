@@ -15,3 +15,19 @@ export function validateBody(schema) {
     next();
   };
 }
+
+/**
+ * @param {import('zod').ZodSchema} schema
+ */
+export function validateQuery(schema) {
+  return (req, _res, next) => {
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      const msg = parsed.error.issues.map((e) => e.message).join("; ");
+      next(new ValidationError(msg || "Invalid query"));
+      return;
+    }
+    req.query = parsed.data;
+    next();
+  };
+}

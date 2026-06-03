@@ -1,10 +1,22 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getSessionUser } from "../../auth/auth";
+import { apiRequest, isApiBackendEnabled } from "../../lib/apiClient";
+
+function localTodayYmd() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 const FALLBACK_AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCNeGKVRJgIPImTURVGAslzSS3ZGPZ1xwjwxmvnBO6MgCf_BcNjV1Jb4dQVUUhe2eezIrwoSJlx8y4bf3tE4mzYZ7Ob5GUGFekJ8dYQKoLn6pO04wFbneUeuijPEKJvnZIoJGeL-M2ktUWVwsSZJVp0p6H9hEYTuSXFd30ToMP9i6HpnGMb3hPgU95cjKY1BqdQXKMKQz7xSUcpPh5dxD-VMYhec9PJLins0xpetqOgFxP2RK1LxYvs18mJOZUQXWm9j8hAZlhXO0Q";
 const HISTORY_KEY = "health_upload_history_v1";
+/** Gambar daftar jika tidak ada thumbnail (sinkron dari DB). */
+const FOOD_LIST_FALLBACK_IMG =
+  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&q=80";
 const DAILY_CALORIE_TARGET = 2250;
 /** Target harian untuk bar makro (≈ 20% protein / 30% lemak / 50% karb dari 2350 kkal; serat 30g). */
 const MACRO_G_TARGETS = {
@@ -29,6 +41,71 @@ export default function NutritionInsightContent() {
       ? rawName
       : "Pengguna";
   const avatarPhoto = sessionUser?.photo || FALLBACK_AVATAR;
+
+  const [weeklySummary, setWeeklySummary] = useState(null);
+  const [weeklyLoading, setWeeklyLoading] = useState(() => isApiBackendEnabled());
+  const [weeklyError, setWeeklyError] = useState("");
+  const [dailySummary, setDailySummary] = useState(null);
+  const [dailyLoading, setDailyLoading] = useState(() => isApiBackendEnabled());
+  const [dailyError, setDailyError] = useState("");
+
+  useEffect(() => {
+    if (!isApiBackendEnabled()) {
+      setWeeklyLoading(false);
+      setWeeklyError("");
+      setWeeklySummary(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setWeeklyLoading(true);
+      setWeeklyError("");
+      try {
+        const date = localTodayYmd();
+        const data = await apiRequest(`/me/food/weekly-summary?date=${encodeURIComponent(date)}`);
+        if (!cancelled) setWeeklySummary(data);
+      } catch (e) {
+        if (!cancelled) {
+          setWeeklySummary(null);
+          setWeeklyError(e instanceof Error ? e.message : "Gagal memuat ringkasan mingguan.");
+        }
+      } finally {
+        if (!cancelled) setWeeklyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isApiBackendEnabled()) {
+      setDailyLoading(false);
+      setDailyError("");
+      setDailySummary(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setDailyLoading(true);
+      setDailyError("");
+      try {
+        const date = localTodayYmd();
+        const data = await apiRequest(`/me/food/daily-summary?date=${encodeURIComponent(date)}`);
+        if (!cancelled) setDailySummary(data);
+      } catch (e) {
+        if (!cancelled) {
+          setDailySummary(null);
+          setDailyError(e instanceof Error ? e.message : "Gagal memuat data makanan hari ini.");
+        }
+      } finally {
+        if (!cancelled) setDailyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const glucosePoints = [
     { t: "12 AM", x: 0, y: 72 },
@@ -64,82 +141,62 @@ export default function NutritionInsightContent() {
     return null;
   };
 
-  const weeklyFoodCalories = useMemo(
-    () => [
-      { key: "sen", label: "Sen", calories: 300 },
-      { key: "sel", label: "Sel", calories: 1000 },
-      { key: "rab", label: "Rab", calories: 1580 },
-      { key: "kam", label: "Kam", calories: 1000 },
-      { key: "jum", label: "Jum", calories: 1690 },
-      { key: "sab", label: "Sab", calories: 1400 },
-      { key: "min", label: "Min", calories: 1620 },
-    ],
-    []
-  );
+  const weeklyChartPoints = useMemo(() => {
+    const days = weeklySummary?.days;
+    if (!Array.isArray(days) || days.length !== 7) return [];
+    const maxCal = Math.max(1, ...days.map((d) => Number(d.calories_kcal) || 0));
+    return days.map((d, idx) => {
+      const cal = Number(d.calories_kcal) || 0;
+      const x = (310 / 6) * idx;
+      const y = cal === 0 ? 72 : 72 - (Math.min(cal, maxCal) / maxCal) * 54;
+      return {
+        ...d,
+        key: d.date,
+        x,
+        y,
+      };
+    });
+  }, [weeklySummary]);
 
-  const weeklyAvailableValues = weeklyFoodCalories.map((it) => Number(it.calories)).filter((v) => Number.isFinite(v));
-  const weeklyMax = Math.max(...weeklyAvailableValues, 1);
-  const weeklyPoints = weeklyFoodCalories.map((it, idx) => {
-    const x = (310 / 6) * idx;
-    const y =
-      it.calories == null
-        ? null
-        : 72 - (Math.min(Number(it.calories), weeklyMax) / weeklyMax) * 54;
-    return { ...it, x, y };
-  });
-  const weeklyPath = weeklyPoints.map((p) => `${p.x},${p.y}`).join(" ");
-  const hasWeeklyOverCalorieTarget = weeklyFoodCalories.some((it) => Number(it.calories) > DAILY_CALORIE_TARGET);
-  const weeklyTotalCalories = weeklyFoodCalories.reduce((sum, it) => sum + (it.calories || 0), 0);
-  const weeklyCountedDays = weeklyFoodCalories.filter((it) => (it.calories || 0) > 0);
-  const weeklyCountedTotalCalories = weeklyCountedDays.reduce((sum, it) => sum + (it.calories || 0), 0);
-  const weeklyAvgCalories =
-    weeklyCountedDays.length > 0
-      ? Math.round(weeklyCountedTotalCalories / weeklyCountedDays.length)
-      : 0;
-  const weeklyTargetCalories = DAILY_CALORIE_TARGET * (weeklyCountedDays.length || 1);
-  const weeklyProgressPct =
-    weeklyCountedDays.length > 0
-      ? Math.round((weeklyCountedTotalCalories / weeklyTargetCalories) * 100)
-      : 0;
+  const weeklyPath = useMemo(() => weeklyChartPoints.map((p) => `${p.x},${p.y}`).join(" "), [weeklyChartPoints]);
+  const weeklyHighlightPoint = useMemo(() => {
+    if (!weeklyChartPoints.length) return null;
+    const today = localTodayYmd();
+    const onToday = weeklyChartPoints.find((p) => p.date === today);
+    return onToday || weeklyChartPoints[weeklyChartPoints.length - 1];
+  }, [weeklyChartPoints]);
+  const hasWeeklyOverCalorieTarget = useMemo(
+    () => weeklyChartPoints.some((it) => Number(it.calories_kcal) > DAILY_CALORIE_TARGET),
+    [weeklyChartPoints]
+  );
+  const weeklyAvgCalories = weeklySummary?.avg_calories_per_day != null ? Math.round(Number(weeklySummary.avg_calories_per_day)) : 0;
+  const weeklyProgressPct = weeklySummary?.progress_pct != null ? Number(weeklySummary.progress_pct) : 0;
   const weeklyProgressText = `${weeklyProgressPct}%`;
   const weeklyLastSyncLabel = new Date().toLocaleString("id-ID", { weekday: "short", hour: "2-digit", minute: "2-digit" });
-  const todayFoodCalories = useMemo(() => {
-    try {
-      const now = new Date();
-      const todayKey = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      const raw = localStorage.getItem(HISTORY_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return 0;
-      return parsed.reduce((sum, it) => {
-        if (!it || it.type !== "food" || it.createdAt == null) return sum;
-        const d = new Date(it.createdAt);
-        const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-        if (key !== todayKey) return sum;
-        return sum + parseCalories(it.calories);
-      }, 0);
-    } catch {
-      return 0;
-    }
-  }, [location.key, location.pathname]);
-  const todayProteinG = useMemo(() => {
-    try {
-      const now = new Date();
-      const todayKey = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      const raw = localStorage.getItem(HISTORY_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return 0;
-      return parsed.reduce((sum, it) => {
-        if (!it || it.type !== "food" || it.createdAt == null) return sum;
-        const d = new Date(it.createdAt);
-        const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-        if (key !== todayKey) return sum;
-        return sum + parseCalories(it.proteinG);
-      }, 0);
-    } catch {
-      return 0;
-    }
-  }, [location.key, location.pathname]);
+  const weekRangeLabel =
+    weeklySummary?.week_start && weeklySummary?.week_end
+      ? `${weeklySummary.week_start} – ${weeklySummary.week_end}`
+      : "";
+
   const todayNutritionTotals = useMemo(() => {
+    const fromApi = isApiBackendEnabled() && dailySummary?.totals != null && !dailyError;
+    if (fromApi && dailySummary?.totals) {
+      const t = dailySummary.totals;
+      return {
+        energyKkal: Number(t.energy_kkal) || 0,
+        proteinG: Number(t.protein_g) || 0,
+        fatsG: Number(t.fats_g) || 0,
+        carbsG: Number(t.carbs_g) || 0,
+        fiberG: Number(t.fiber_g) || 0,
+        waterMl: Number(t.water_ml) || 0,
+        vitA_RE: t.vit_a_re,
+        vitD_mcg: t.vit_d_mcg,
+        vitE_mg: t.vit_e_mg,
+        vitK_mcg: t.vit_k_mcg,
+        vitC_mg: t.vit_c_mg,
+      };
+    }
+
     const init = {
       energyKkal: 0,
       proteinG: 0,
@@ -219,13 +276,52 @@ export default function NutritionInsightContent() {
     } catch {
       return { ...init, vitA_RE: null, vitD_mcg: null, vitE_mg: null, vitK_mcg: null, vitC_mg: null };
     }
-  }, [location.key, location.pathname]);
-  const todayFoodCaloriesRounded = Math.max(0, Math.round(todayFoodCalories));
-  const todayProteinRounded = Math.max(0, Math.round(todayProteinG));
+  }, [dailySummary, dailyError, location.key, location.pathname]);
+
+  const todayFoodListItems = useMemo(() => {
+    const fromApi = isApiBackendEnabled() && dailySummary?.totals != null && !dailyError;
+    if (fromApi && Array.isArray(dailySummary?.items)) {
+      return dailySummary.items.map((it) => ({
+        key: `db-${it.id}`,
+        title: it.food_name || "Makanan",
+        subtitle: it.nutrition_notes?.trim() || "Tercatat di server",
+        calories: it.calories_kcal,
+        createdAt: it.created_at,
+        historyHref: it.client_item_id ? `/history/${it.client_item_id}` : null,
+        thumb: it.image_url?.trim() || FOOD_LIST_FALLBACK_IMG,
+      }));
+    }
+
+    try {
+      const now = new Date();
+      const todayKey = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const raw = localStorage.getItem(HISTORY_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((it) => {
+          if (!it || it.type !== "food" || it.createdAt == null) return false;
+          const d = new Date(it.createdAt);
+          const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+          return key === todayKey;
+        })
+        .map((it) => ({
+          key: `local-${it.id}`,
+          title: it.foodName || "Upload makanan",
+          subtitle: it.nutritionNotes || "Foto konsumsi makanan untuk tracking nutrisi.",
+          calories: it.calories,
+          createdAt: it.createdAt,
+          historyHref: `/history/${it.id}`,
+          thumb: it.image || FOOD_LIST_FALLBACK_IMG,
+        }));
+    } catch {
+      return [];
+    }
+  }, [dailySummary, dailyError, location.key, location.pathname]);
+
+  const todayFoodCaloriesRounded = Math.max(0, Math.round(todayNutritionTotals.energyKkal));
   const todayCalorieProgressPct = Math.max(0, Math.round((todayFoodCaloriesRounded / DAILY_CALORIE_TARGET) * 100));
-  const energyForSummary = Math.round(
-    todayNutritionTotals.energyKkal > 0 ? todayNutritionTotals.energyKkal : todayFoodCaloriesRounded
-  );
+  const energyForSummary = Math.round(todayNutritionTotals.energyKkal);
   const macroPcts = {
     protein: Math.round(
       MACRO_G_TARGETS.proteinG > 0 ? (todayNutritionTotals.proteinG / MACRO_G_TARGETS.proteinG) * 100 : 0
@@ -289,55 +385,84 @@ export default function NutritionInsightContent() {
           <div className="rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold">Ringkasan Kalori Mingguan</h3>
-              <span className="material-symbols-outlined text-slate-400 text-[18px]">info</span>
+              {/* <span className="text-[10px] text-slate-400 font-medium tabular-nums">{weekRangeLabel}</span> */}
             </div>
+            {weeklyError && (
+              <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">{weeklyError}</p>
+            )}
             <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
-              <svg viewBox="0 0 310 88" className="w-full h-24">
-                <defs>
-                  <linearGradient id={hasWeeklyOverCalorieTarget ? "weeklyCalorieDangerLine" : "weeklyCalorieSafeLine"} x1="0%" x2="100%" y1="0%" y2="0%">
-                    {hasWeeklyOverCalorieTarget ? (
-                      <>
-                        <stop offset="0%" stopColor="#ef4444" />
-                        <stop offset="100%" stopColor="#ef4444" />
-                      </>
-                    ) : (
-                      <>
-                        <stop offset="0%" stopColor="#22c55e" />
-                        <stop offset="100%" stopColor="#22c55e" />
-                      </>
+              {weeklyLoading ? (
+                <div className="h-24 flex items-center justify-center text-sm text-slate-500">Memuat grafik…</div>
+              ) : !isApiBackendEnabled() ? (
+                <div className="h-24 flex items-center justify-center text-xs text-slate-500 text-center px-2">
+                  Set VITE_API_URL untuk ringkasan kalori dari database.
+                </div>
+              ) : (
+                <>
+                  <svg viewBox="0 0 310 88" className="w-full h-24">
+                    <defs>
+                      <linearGradient id={hasWeeklyOverCalorieTarget ? "weeklyCalorieDangerLine" : "weeklyCalorieSafeLine"} x1="0%" x2="100%" y1="0%" y2="0%">
+                        {hasWeeklyOverCalorieTarget ? (
+                          <>
+                            <stop offset="0%" stopColor="#ef4444" />
+                            <stop offset="100%" stopColor="#ef4444" />
+                          </>
+                        ) : (
+                          <>
+                            <stop offset="0%" stopColor="#22c55e" />
+                            <stop offset="100%" stopColor="#22c55e" />
+                          </>
+                        )}
+                      </linearGradient>
+                    </defs>
+                    <polyline fill="none" stroke="#e5e7eb" strokeWidth="1.5" points="0,76 310,76" />
+                    {weeklyChartPoints.length > 0 && (
+                      <polyline
+                        fill="none"
+                        stroke={`url(#${hasWeeklyOverCalorieTarget ? "weeklyCalorieDangerLine" : "weeklyCalorieSafeLine"})`}
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        points={weeklyPath}
+                      />
                     )}
-                  </linearGradient>
-                </defs>
-                <polyline fill="none" stroke="#e5e7eb" strokeWidth="1.5" points="0,76 310,76" />
-                <polyline
-                  fill="none"
-                  stroke={`url(#${hasWeeklyOverCalorieTarget ? "weeklyCalorieDangerLine" : "weeklyCalorieSafeLine"})`}
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  points={weeklyPath}
-                />
-                <circle cx={310} cy={weeklyPoints[6]?.y ?? 52} r="4.5" fill={hasWeeklyOverCalorieTarget ? "#ef4444" : "#22c55e"} />
-              </svg>
-              <div className="grid grid-cols-7 text-[10px] text-slate-400 mt-1">
-                {weeklyFoodCalories.map((day) => (
-                  <span key={day.key} className="text-center">
-                    {day.label}
-                  </span>
-                ))}
-              </div>
+                    {weeklyHighlightPoint && (
+                      <circle
+                        cx={weeklyHighlightPoint.x}
+                        cy={weeklyHighlightPoint.y}
+                        r="4.5"
+                        fill={hasWeeklyOverCalorieTarget ? "#ef4444" : "#22c55e"}
+                      />
+                    )}
+                  </svg>
+                  <div className="grid grid-cols-7 text-[10px] text-slate-400 mt-1 gap-0.5">
+                    {weeklyChartPoints.map((day) => (
+                      <span key={day.date} className="text-center truncate" title={`${day.date}: ${day.calories_kcal} kkal`}>
+                        {day.label}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-2xl font-bold leading-none">{weeklyAvgCalories.toLocaleString("id-ID")}</p>
+                <p className="text-2xl font-bold leading-none tabular-nums">{weeklyLoading ? "…" : weeklyAvgCalories.toLocaleString("id-ID")}</p>
                 <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
                   kkal / hari (rata-rata)
                   <span className={`${weeklyProgressPct > 100 ? "text-red-500" : "text-green-500"} font-semibold`}>{weeklyProgressText}</span>
                 </p>
               </div>
-              <button className="h-9 px-4 rounded-full bg-black text-white text-sm font-semibold">Detail</button>
+              <Link
+                to="/history"
+                className="h-9 px-4 rounded-full bg-black text-white text-sm font-semibold inline-flex items-center justify-center dark:bg-white dark:text-black"
+              >
+                Detail
+              </Link>
             </div>
-            <p className="text-[10px] text-slate-400 mt-2">Last synced {weeklyLastSyncLabel}</p>
+            <p className="text-[10px] text-slate-400 mt-2">
+              Sumber: food_analyses • {weeklyLastSyncLabel}
+            </p>
           </div>
         </div>
 
@@ -432,6 +557,72 @@ export default function NutritionInsightContent() {
               </div>
             </details>
           </div>
+        </div>
+
+        <div className="px-4 py-2">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h3 className="text-lg font-bold leading-tight tracking-[-0.015em]">Riwayat makanan hari ini</h3>
+            <Link to="/history" className="text-primary text-sm font-semibold">
+              Lihat semua
+            </Link>
+          </div>
+          {dailyError && isApiBackendEnabled() && (
+            <p className="text-xs text-amber-700 dark:text-amber-300 mb-2 px-1">{dailyError}</p>
+          )}
+          {dailyLoading && isApiBackendEnabled() ? (
+            <div className="rounded-2xl bg-white dark:bg-slate-900 p-6 text-center text-sm text-slate-500 border border-slate-100 dark:border-slate-800">
+              Memuat riwayat…
+            </div>
+          ) : todayFoodListItems.length === 0 ? (
+            <div className="rounded-2xl bg-white dark:bg-slate-900 p-6 text-center border border-slate-100 dark:border-slate-800">
+              <p className="text-slate-700 dark:text-slate-200 font-bold text-sm">Belum ada makanan hari ini</p>
+              <p className="text-slate-500 text-xs mt-1">Sinkronkan dari aplikasi atau tambah analisis makanan.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {todayFoodListItems.map((it) => {
+                const row = (
+                  <>
+                    <div className="relative w-20 h-20 rounded-2xl overflow-hidden bg-slate-100 shrink-0">
+                      <img src={it.thumb} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/35 to-transparent" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          Makanan
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {it.createdAt ? new Date(it.createdAt).toLocaleString("id-ID") : "—"}
+                        </span>
+                      </div>
+                      <p className="text-slate-900 dark:text-slate-100 font-bold mt-2 leading-tight">{it.title}</p>
+                      <p className="text-slate-500 text-sm mt-1 line-clamp-2">{it.subtitle}</p>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-400">{it.historyHref ? "Lihat detail" : "Detail di History setelah sinkron"}</span>
+                        <span className="text-xs font-bold text-primary">
+                          {it.calories != null && it.calories !== ""
+                            ? `${typeof it.calories === "number" ? Math.round(it.calories) : it.calories} kkal`
+                            : "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                );
+                const cardClass =
+                  "group flex gap-4 p-4 rounded-[1.5rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md active:scale-[0.99] transition-all";
+                return it.historyHref ? (
+                  <Link key={it.key} to={it.historyHref} className={cardClass}>
+                    {row}
+                  </Link>
+                ) : (
+                  <div key={it.key} className={`${cardClass} cursor-default`}>
+                    {row}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="px-4 py-2">

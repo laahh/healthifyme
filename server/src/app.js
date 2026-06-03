@@ -11,7 +11,7 @@ export function createApp() {
 
   app.disable("x-powered-by");
   app.use(helmet());
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({ limit: "15mb" }));
 
   const origins = parseCorsOrigins(env.CORS_ORIGIN);
   app.use(

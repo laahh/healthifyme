@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getSessionUser } from "../../auth/auth";
-import { isApiBackendEnabled } from "../../lib/apiClient";
+import { getAuthToken, isApiBackendEnabled } from "../../lib/apiClient";
+import { compressDataUrlForAi } from "../../lib/imageCompressForAi";
+import { isNativeApp } from "../../lib/nativePlatform";
 import { fetchGeminiFoodAnalysis } from "../../lib/foodAnalysisGemini";
+import {
+  canUseGeminiBackend,
+  fetchGeminiFoodViaBackend,
+  fetchGeminiWorkoutViaBackend,
+} from "../../lib/geminiBackend";
 import { getGeminiApiKeyConfigError } from "../../lib/geminiEnv";
 import { hydrateUserDataFromCloud } from "../../services/supabaseDataService";
 import { parseWorkoutTimeStringToMinutes } from "../../lib/workoutDurationMinutes";
@@ -300,25 +307,48 @@ export default function HomeContent() {
 
   const handleAnalyzeAI = async () => {
     if (!capturedImage) return;
-    const keyErr = getGeminiApiKeyConfigError(GEMINI_API_KEY);
+    const useGeminiBackend = canUseGeminiBackend();
+
+    if (isNativeApp() && !useGeminiBackend) {
+      if (!isApiBackendEnabled()) {
+        setAnalysisError(
+          "Analisis AI di aplikasi memerlukan API server: pastikan VITE_API_URL di-set saat build, lalu rebuild APK."
+        );
+        return;
+      }
+      if (!getAuthToken()) {
+        setAnalysisError(
+          "Silakan login terlebih dahulu. Di aplikasi Android, analisis foto memakai server (bukan kunci Gemini dari perangkat)."
+        );
+        return;
+      }
+    }
+
+    const keyErr = useGeminiBackend ? "" : getGeminiApiKeyConfigError(GEMINI_API_KEY);
     if (keyErr) {
       setAnalysisError(keyErr);
       return;
     }
 
-    const parsedImage = parseDataUrl(capturedImage);
-    if (!parsedImage) {
-      setAnalysisError("Format gambar tidak valid.");
-      return;
-    }
-
     setIsAnalyzing(true);
     setAnalysisError("");
+    setAnalysisResult(null);
 
     const isWorkout = captureType === "activity";
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     try {
+      /** APK: payload JSON base64 besar — kompresi agresif (WebView/Cloudflare lebih sensitif dari desktop). */
+      const compressOpts = isNativeApp()
+        ? { maxEdge: 640, quality: 0.6 }
+        : {};
+      const imageForAi = await compressDataUrlForAi(capturedImage, compressOpts);
+      const parsedImage = parseDataUrl(imageForAi);
+      if (!parsedImage) {
+        setAnalysisError("Format gambar tidak valid.");
+        return;
+      }
+
       if (isWorkout) {
         const prompt = `Ini screenshot ringkasan olahraga dari aplikasi fitness (mis. Apple Fitness, Strava, Garmin, dll).
 Baca semua teks dan angka yang terlihat di gambar (tanggal, jenis aktivitas, rentang waktu, lokasi, dan blok "Workout Details" / metrik).
@@ -342,62 +372,67 @@ Balas HANYA JSON valid (tanpa markdown), dengan struktur persis:
 }
 Gunakan string kosong "" jika field tidak terbaca. summaryText wajib berisi ringkasan lengkap yang bisa dibaca manusia.`;
 
-        let response = null;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      { text: prompt.trim() },
-                      {
-                        inline_data: {
-                          mime_type: parsedImage.mimeType,
-                          data: parsedImage.base64Data,
+        let parsed;
+        if (useGeminiBackend) {
+          parsed = await fetchGeminiWorkoutViaBackend(parsedImage);
+        } else {
+          let response = null;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      parts: [
+                        { text: prompt.trim() },
+                        {
+                          inline_data: {
+                            mime_type: parsedImage.mimeType,
+                            data: parsedImage.base64Data,
+                          },
                         },
-                      },
-                    ],
+                      ],
+                    },
+                  ],
+                  generationConfig: {
+                    temperature: 0.2,
+                    responseMimeType: "application/json",
                   },
-                ],
-                generationConfig: {
-                  temperature: 0.2,
-                  responseMimeType: "application/json",
-                },
-              }),
-            }
-          );
+                }),
+              }
+            );
 
-          if (response.ok) break;
-          if (response.status === 429 && attempt < 2) {
-            await wait(800 * (attempt + 1));
-            continue;
+            if (response.ok) break;
+            if (response.status === 429 && attempt < 2) {
+              await wait(800 * (attempt + 1));
+              continue;
+            }
+
+            const detail = await response.text().catch(() => "");
+            const requestError = new Error(
+              `Gemini request failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`
+            );
+            requestError.status = response.status;
+            throw requestError;
           }
 
-          const detail = await response.text().catch(() => "");
-          const requestError = new Error(
-            `Gemini request failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`
-          );
-          requestError.status = response.status;
-          throw requestError;
-        }
+          if (!response || !response.ok) {
+            const fallbackError = new Error("Gemini request failed (unknown)");
+            fallbackError.status = 0;
+            throw fallbackError;
+          }
 
-        if (!response || !response.ok) {
-          const fallbackError = new Error("Gemini request failed (unknown)");
-          fallbackError.status = 0;
-          throw fallbackError;
+          const data = await response.json();
+          const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+          parsed = JSON.parse(textResult);
         }
-
-        const data = await response.json();
-        const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-        const parsed = JSON.parse(textResult);
 
         const workoutPayload = {
           type: "activity",
-          image: capturedImage,
+          image: imageForAi,
           createdAt: Date.now(),
           activityType: String(parsed.activityType || "").trim() || "Workout",
           dateLine: String(parsed.dateLine || "").trim(),
@@ -420,14 +455,16 @@ Gunakan string kosong "" jika field tidak terbaca. summaryText wajib berisi ring
         return;
       }
 
-      const result = await fetchGeminiFoodAnalysis(GEMINI_API_KEY, parsedImage);
+      const result = useGeminiBackend
+        ? await fetchGeminiFoodViaBackend(parsedImage)
+        : await fetchGeminiFoodAnalysis(GEMINI_API_KEY, parsedImage);
 
       setAnalysisResult(result);
       localStorage.setItem(
         TEMP_ANALYSIS_KEY,
         JSON.stringify({
           type: captureType,
-          image: capturedImage,
+          image: imageForAi,
           ...result,
           createdAt: Date.now(),
         })
@@ -437,10 +474,30 @@ Gunakan string kosong "" jika field tidak terbaca. summaryText wajib berisi ring
     } catch (error) {
       console.error("AI analyze failed:", error);
       const status = Number(error?.status);
+      const raw = typeof error?.message === "string" ? error.message.trim() : "";
       if (status === 429) {
-        setAnalysisError("Kuota Gemini sedang penuh (429). Tunggu sebentar lalu coba lagi, atau cek quota/billing API key.");
+        setAnalysisError(
+          "Kuota Gemini sedang penuh (429). Tunggu sebentar lalu coba lagi, atau cek quota/billing API key."
+        );
+      } else if (raw) {
+        const netFail =
+          raw === "Failed to fetch" ||
+          raw.includes("NetworkError") ||
+          raw.includes("Load failed") ||
+          raw.includes("network");
+        if (netFail) {
+          setAnalysisError(
+            isWorkout
+              ? "Koneksi ke server putus saat upload/analisis gambar. Di VPS: naikkan client_max_body_size (mis. 25m), proxy_read_timeout dan proxy_send_timeout (mis. 180–300s) untuk lokasi /api/. Coba foto lebih ringan."
+              : "Jaringan ke server putus saat kirim foto untuk AI (bukan masalah login). Umumnya: body terlalu besar untuk Nginx (default ~1m) atau timeout saat server memanggil Gemini. Set client_max_body_size 25m; proxy_read_timeout / proxy_send_timeout 180–300s; pastikan VITE_API_URL di build APK = origin API production (HTTPS). Lalu reload Nginx dan rebuild APK jika URL berubah."
+          );
+        } else {
+          setAnalysisError(raw.length > 360 ? `${raw.slice(0, 360)}…` : raw);
+        }
       } else {
-        setAnalysisError(isWorkout ? "Gagal membaca screenshot workout. Coba foto lebih jelas." : "Gagal analisis AI. Coba lagi.");
+        setAnalysisError(
+          isWorkout ? "Gagal membaca screenshot workout. Coba foto lebih jelas." : "Gagal analisis AI. Coba lagi."
+        );
       }
     } finally {
       setIsAnalyzing(false);

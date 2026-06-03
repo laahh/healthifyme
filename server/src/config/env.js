@@ -12,6 +12,8 @@ const schema = z.object({
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   JWT_EXPIRES_IN: z.string().default("7d"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  /** Kunci Google AI (Gemini) hanya di server; dipakai proxy `/me/ai/gemini-*`. */
+  GEMINI_API_KEY: z.string().optional().default(""),
   /** Nama kolom urutan di `exercise_instructions` (mis. sort_order). Kosongkan untuk auto-deteksi. */
   EXERCISE_INSTRUCTION_ORDER_COLUMN: z.string().max(64).optional(),
   /** Nama kolom teks langkah di `exercise_instructions` (mis. body). Kosongkan untuk auto-deteksi. */

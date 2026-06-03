@@ -1,8 +1,9 @@
 import { AUTH_SESSION_KEY, AUTH_TOKEN_KEY } from "./storageKeys";
+import { getApiOriginsToTry, getApiPathPrefix } from "./apiOrigin";
 
 function apiBase() {
-  const b = import.meta.env.VITE_API_URL;
-  return typeof b === "string" ? b.trim().replace(/\/$/, "") : "";
+  const bases = getApiOriginsToTry();
+  return bases[0] || "";
 }
 
 export function isApiBackendEnabled() {
@@ -47,7 +48,8 @@ export async function apiRequest(path, options = {}) {
     throw new Error("VITE_API_URL tidak di-set.");
   }
   const normalized = path.startsWith("/") ? path : `/${path}`;
-  const url = `${base}/api/v1${normalized}`;
+  const prefix = getApiPathPrefix();
+  const bases = getApiOriginsToTry();
 
   const { json, headers: extraHeaders, ...rest } = options;
   /** @type {Record<string, string>} */
@@ -63,7 +65,16 @@ export async function apiRequest(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, { ...rest, headers, body });
+  let res = /** @type {Response | null} */ (null);
+  let url = "";
+  for (let i = 0; i < bases.length; i += 1) {
+    url = `${bases[i]}${prefix}${normalized}`;
+    res = await fetch(url, { ...rest, headers, body });
+    if (res.status !== 404 || i === bases.length - 1) break;
+  }
+  if (!res) {
+    throw new Error("Permintaan API gagal.");
+  }
 
   if (res.status === 401) {
     clearAuthToken();
@@ -82,8 +93,13 @@ export async function apiRequest(path, options = {}) {
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
-    const msg = typeof errBody.error === "string" ? errBody.error : `HTTP ${res.status}`;
-    throw new Error(msg);
+    let msg = typeof errBody.error === "string" ? errBody.error : `HTTP ${res.status}`;
+    if (res.status === 404 && typeof errBody.error !== "string") {
+      msg = `HTTP 404 — ${url}. Cek VITE_API_URL (hanya origin, tanpa /api), deploy server, dan Nginx proxy ke Node.`;
+    }
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
   }
 
   if (res.status === 204) {

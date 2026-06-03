@@ -1,3 +1,4 @@
+import { getPool } from "../config/database.js";
 import { parseBigIntId } from "./sqlBigInt.js";
 
 /**
@@ -183,4 +184,65 @@ export async function syncFoodAnalysisFromHistoryPayload(conn, userId, clientIte
     );
     order += 1;
   }
+}
+
+/**
+ * Agregasi kalori & jumlah entri per tanggal (untuk grafik mingguan).
+ * @param {string} userId
+ * @param {string} startDate YYYY-MM-DD
+ * @param {string} endDate YYYY-MM-DD
+ */
+export async function aggregateFoodByDateInRange(userId, startDate, endDate) {
+  const uid = parseBigIntId(userId);
+  if (uid == null) return [];
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT DATE(created_at) AS d,
+            COALESCE(SUM(total_calories), 0) AS calories_sum,
+            COUNT(*) AS meal_count
+     FROM food_analyses
+     WHERE user_id = :uid AND DATE(created_at) >= :start AND DATE(created_at) <= :end
+     GROUP BY DATE(created_at)
+     ORDER BY d ASC`,
+    { uid, start: startDate, end: endDate }
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+/**
+ * Daftar analisis makanan pada satu tanggal (untuk riwayat hari ini).
+ * @param {string} userId
+ * @param {string} dateStr YYYY-MM-DD
+ */
+export async function listFoodAnalysesForUserDate(userId, dateStr) {
+  const uid = parseBigIntId(userId);
+  if (uid == null) return [];
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT fa.id,
+            fa.client_item_id,
+            fa.food_name,
+            fa.nutrition_notes,
+            fa.total_calories,
+            fa.protein_g,
+            fa.fats_g,
+            fa.carbs_g,
+            fa.fiber_g,
+            fa.water_ml,
+            fa.vit_a_re,
+            fa.vit_d_mcg,
+            fa.vit_e_mg,
+            fa.vit_k_mcg,
+            fa.vit_c_mg,
+            fa.created_at,
+            JSON_UNQUOTE(JSON_EXTRACT(uh.payload, '$.image')) AS image_url
+     FROM food_analyses fa
+     LEFT JOIN user_history uh
+       ON uh.user_id = fa.user_id
+      AND uh.item_id = fa.client_item_id
+     WHERE fa.user_id = :uid AND DATE(fa.created_at) = :d
+     ORDER BY fa.created_at DESC`,
+    { uid, d: dateStr }
+  );
+  return Array.isArray(rows) ? rows : [];
 }

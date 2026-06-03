@@ -13,6 +13,13 @@ export async function getProfileForUser(requestUserId, targetUserId) {
       phone: "",
       email: "",
       address: null,
+      gender: null,
+      height_cm: null,
+      weight_kg: null,
+      activity_level: null,
+      exercise_preferences: null,
+      food_restrictions: null,
+      timezone: null,
     };
   }
   return {
@@ -21,6 +28,13 @@ export async function getProfileForUser(requestUserId, targetUserId) {
     phone: row.phone ?? "",
     email: row.email ?? "",
     address: row.address ?? null,
+    gender: row.gender ?? null,
+    height_cm: row.height_cm ?? null,
+    weight_kg: row.weight_kg ?? null,
+    activity_level: row.activity_level ?? null,
+    exercise_preferences: row.exercise_preferences ?? null,
+    food_restrictions: row.food_restrictions ?? null,
+    timezone: row.timezone ?? null,
   };
 }
 
@@ -35,6 +49,18 @@ export async function saveProfile(requestUserId, targetUserId, body) {
     email: body.email !== undefined ? body.email : (existing?.email ?? ""),
     address:
       body.address !== undefined ? body.address : (existing?.address ?? null),
+    gender: body.gender !== undefined ? body.gender : existing?.gender ?? null,
+    height_cm: body.height_cm !== undefined ? body.height_cm : existing?.height_cm ?? null,
+    weight_kg: body.weight_kg !== undefined ? body.weight_kg : existing?.weight_kg ?? null,
+    activity_level:
+      body.activity_level !== undefined ? body.activity_level : existing?.activity_level ?? null,
+    exercise_preferences:
+      body.exercise_preferences !== undefined
+        ? body.exercise_preferences
+        : existing?.exercise_preferences ?? null,
+    food_restrictions:
+      body.food_restrictions !== undefined ? body.food_restrictions : existing?.food_restrictions ?? null,
+    timezone: body.timezone !== undefined ? body.timezone : existing?.timezone ?? null,
   });
   return getProfileForUser(requestUserId, targetUserId);
 }

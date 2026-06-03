@@ -7,6 +7,7 @@ import {
   isApiBackendEnabled,
   setAuthToken,
 } from "../lib/apiClient";
+import { getApiOriginsToTry, getApiPathPrefix } from "../lib/apiOrigin";
 import { isSupabaseEnabled, supabase } from "../lib/supabaseClient";
 import { hydrateUserDataFromCloud } from "../services/supabaseDataService";
 
@@ -142,12 +143,21 @@ export function logout() {
 async function loginWithNodeApi(usernameOrEmail, password) {
   const identity = String(usernameOrEmail || "").trim();
   const pwd = String(password || "");
-  const base = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-  const res = await fetch(`${base}/api/v1/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: identity, password: pwd }),
-  });
+  const prefix = getApiPathPrefix();
+  const bases = getApiOriginsToTry();
+  let res = /** @type {Response | null} */ (null);
+  for (let i = 0; i < bases.length; i += 1) {
+    const loginUrl = `${bases[i]}${prefix}/auth/login`;
+    res = await fetch(loginUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: identity, password: pwd }),
+    });
+    if (res.status !== 404 || i === bases.length - 1) break;
+  }
+  if (!res) {
+    return { user: null, error: "Tidak dapat menghubungi server." };
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = typeof body.error === "string" ? body.error : "SID atau password salah.";
