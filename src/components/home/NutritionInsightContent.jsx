@@ -633,7 +633,7 @@ export default function NutritionInsightContent() {
           <div className="flex items-stretch justify-between gap-4 rounded-xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
             <div className="flex flex-[2_2_0px] flex-col gap-4">
               <div className="flex flex-col gap-1">
-              <p className="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight">Mangkuk Quinoa Tinggi Protein</p>
+              <p className="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight">Makanan Tinggi Protein</p>
               <p className="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Keseimbangan sempurna antara 35g protein dan karbohidrat sedang untuk memulihkan cadangan glikogen tubuh Anda.</p>
               </div>
               <button className="flex min-w-[120px] items-center justify-center overflow-hidden rounded-lg h-9 px-4 bg-primary text-white gap-2 text-sm font-semibold w-fit">

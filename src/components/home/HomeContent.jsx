@@ -133,30 +133,13 @@ export default function HomeContent() {
   const isOverDailyActivityTarget = todayActivityMinutesRounded > DAILY_ACTIVITY_MINUTES_TARGET;
 
   const defaultActivityCards = [
-    {
-      key: "default-run",
-      to: "/activity/run?preset=lari",
-      title: "Lari Pagi",
-      subtitle: "Kemarin • 10.2 km",
-      calories: "540 kkal",
-      icon: "directions_run",
-      iconWrap: "bg-blue-100 text-blue-600",
-    },
-    {
-      key: "default-yoga",
-      to: "/activity/run?preset=yoga",
-      title: "Yoga Meditasi",
-      subtitle: "Selasa • 30 menit",
-      calories: "120 kkal",
-      icon: "self_improvement",
-      iconWrap: "bg-green-100 text-green-600",
-    },
+   
     {
       key: "default-breakfast",
       to: "/activity/run?preset=sarapan",
-      title: "Sarapan Oatmeal & Buah",
-      subtitle: "Hari ini • 07:30",
-      calories: "320 kkal",
+      title: "Tidak Ada Aktivitas Hari Ini",
+      subtitle: "Hari ini",
+      calories: "- kkal",
       icon: "restaurant",
       iconWrap: "bg-amber-100 text-amber-600",
     },
