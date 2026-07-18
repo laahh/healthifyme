@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { getSession, loginWithPassword } from "../../auth/auth";
+import { showError } from "../../lib/appAlert";
 
 export default function LoginContent() {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ export default function LoginContent() {
     setLoading(false);
     if (!user) {
       setError(loginError || "Login gagal.");
+      showError("Login gagal", loginError || "Periksa SID dan password Anda.");
       return;
     }
     navigate("/splash", { replace: true, state: { next: from } });

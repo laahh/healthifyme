@@ -1,5 +1,17 @@
-node_modules
-dist
+# Env & secrets
 .env
-.env.localnode_modules
-.venv-locust
+.env.*
+!.env.example
+!.env*.example
+server/.env
+
+# Credentials
+key.json
+credentials.json
+**/service-account*.json
+
+# Local / tooling
+node_modules/
+dist/
+.venv-locust/
+.claude/

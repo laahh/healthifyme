@@ -25,6 +25,29 @@ import {
   CognitiveTestResultsPage,
   SplashPage,
   WelcomePage,
+  CommunityPage,
+  CommunityCreatePage,
+  CommunityManagePage,
+  CommunitySportListPage,
+  CommunityDetailPage,
+  CommunityEventDetailPage,
+  CommunitySparringPage,
+  CommunityCoachingPage,
+  CommunityCompetitionsPage,
+  OpenPlayPage,
+  OpenPlayCreatePage,
+  OpenPlayMinePage,
+  OpenPlayDetailPage,
+  StravaPage,
+  StravaActivityDetailPage,
+  FoodLogPage,
+  FoodManualPage,
+  FoodBarcodePage,
+  FoodScanPage,
+  WorkoutLogPage,
+  WorkoutManualPage,
+  WorkoutScanPage,
+  McuPage,
 } from "./pages/SimplerPages";
 
 export default function App() {
@@ -40,6 +63,30 @@ export default function App() {
         <Route path="/home" element={<HomePage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/history/:id" element={<HistoryItemDetailPage />} />
+        <Route path="/community" element={<CommunityPage />} />
+        <Route path="/community/create" element={<CommunityCreatePage />} />
+        <Route path="/community/manage" element={<CommunityManagePage />} />
+        <Route path="/community/sparring" element={<CommunitySparringPage />} />
+        <Route path="/community/coaching" element={<CommunityCoachingPage />} />
+        <Route path="/community/competitions" element={<CommunityCompetitionsPage />} />
+        <Route path="/community/leaderboard" element={<Navigate to="/community" replace />} />
+        <Route path="/community/sports/:sportKey" element={<CommunitySportListPage />} />
+        <Route path="/community/events/:eventId" element={<CommunityEventDetailPage />} />
+        <Route path="/community/:communityId" element={<CommunityDetailPage />} />
+        <Route path="/open-play" element={<OpenPlayPage />} />
+        <Route path="/open-play/create" element={<OpenPlayCreatePage />} />
+        <Route path="/open-play/mine" element={<OpenPlayMinePage />} />
+        <Route path="/open-play/:eventId" element={<OpenPlayDetailPage />} />
+        <Route path="/strava" element={<StravaPage />} />
+        <Route path="/strava/activities/:activityId" element={<StravaActivityDetailPage />} />
+        <Route path="/food" element={<FoodLogPage />} />
+        <Route path="/food/manual" element={<FoodManualPage />} />
+        <Route path="/food/barcode" element={<FoodBarcodePage />} />
+        <Route path="/food/scan" element={<FoodScanPage />} />
+        <Route path="/workout" element={<WorkoutLogPage />} />
+        <Route path="/workout/manual" element={<WorkoutManualPage />} />
+        <Route path="/workout/scan" element={<WorkoutScanPage />} />
+        <Route path="/mcu" element={<McuPage />} />
         <Route path="/activity/run" element={<ActivityRunPage />} />
         <Route path="/activity/capture" element={<ActivityCapturePage />} />
         <Route path="/food-analysis/result" element={<FoodAnalysisResultPage />} />

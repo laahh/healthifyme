@@ -1,9 +1,9 @@
 /**
- * Minggu dimulai Minggu (sesuai urutan label di UI: M,S,S,R,K,J,S).
- * Satu hari dianggap konsisten jika ada minimal satu item riwayat (makanan atau olahraga) dengan createdAt di tanggal itu (timezone lokal).
+ * Minggu dimulai Minggu (label UI: M,S,S,R,K,J,S).
+ * Satu hari “aktif” (gabungan) jika ada upload makanan ATAU olahraga.
  */
 
-/** Label singkat per kolom — sama seperti desain sebelumnya (Minggu → Sabtu). */
+/** Label singkat per kolom — Minggu → Sabtu. */
 export const WEEK_LABELS_SUN_FIRST = [
   { label: "M", title: "Minggu" },
   { label: "S", title: "Senin" },
@@ -44,17 +44,34 @@ function dateKeyForDayOffset(weekStartSunday, dayOffset) {
 }
 
 /**
- * @param {unknown[]} historyItems - item dari localStorage (punya createdAt)
+ * @param {unknown[]} historyItems
  * @param {Date} [referenceDate]
- * @returns {{ label: string, title: string, done: boolean, dateKey: string }[]}
+ * @returns {{
+ *   label: string,
+ *   title: string,
+ *   dateKey: string,
+ *   food: boolean,
+ *   activity: boolean,
+ *   done: boolean,
+ * }[]}
  */
 export function buildWeekUploadCells(historyItems, referenceDate = new Date()) {
-  const uploaded = new Set();
+  /** @type {Set<string>} */
+  const foodDays = new Set();
+  /** @type {Set<string>} */
+  const activityDays = new Set();
+
   if (Array.isArray(historyItems)) {
     for (const it of historyItems) {
       if (!it || it.createdAt == null) continue;
       const key = localDateKeyFromTimestamp(it.createdAt);
-      if (key) uploaded.add(key);
+      if (!key) continue;
+      if (it.type === "food") foodDays.add(key);
+      else if (it.type === "activity") activityDays.add(key);
+      else {
+        // tipe tidak dikenal — hitung sebagai aktivitas umum agar tidak hilang
+        activityDays.add(key);
+      }
     }
   }
 
@@ -62,11 +79,35 @@ export function buildWeekUploadCells(historyItems, referenceDate = new Date()) {
 
   return WEEK_LABELS_SUN_FIRST.map((meta, idx) => {
     const dateKey = dateKeyForDayOffset(weekStart, idx);
+    const food = foodDays.has(dateKey);
+    const activity = activityDays.has(dateKey);
     return {
       label: meta.label,
       title: meta.title,
       dateKey,
-      done: uploaded.has(dateKey),
+      food,
+      activity,
+      done: food || activity,
     };
   });
+}
+
+/**
+ * Ringkasan konsistensi gabungan minggu ini.
+ * @param {ReturnType<typeof buildWeekUploadCells>} cells
+ */
+export function summarizeWeekConsistency(cells) {
+  const list = Array.isArray(cells) ? cells : [];
+  const foodDays = list.filter((c) => c.food).length;
+  const activityDays = list.filter((c) => c.activity).length;
+  const combinedDays = list.filter((c) => c.done).length;
+  const target = 7;
+  const progressPct = Math.round((combinedDays / target) * 100);
+  return {
+    target,
+    foodDays,
+    activityDays,
+    combinedDays,
+    progressPct,
+  };
 }

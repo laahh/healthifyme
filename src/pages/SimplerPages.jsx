@@ -19,6 +19,32 @@ import PvtTestContent from "../components/cognitive/PvtTestContent";
 import WorkingMemoryTestContent from "../components/cognitive/WorkingMemoryTestContent";
 import CognitiveTestResultsContent from "../components/cognitive/CognitiveTestResultsContent";
 import CognitiveTestSessionContent from "../components/cognitive/CognitiveTestSessionContent";
+import CommunityContent from "../components/home/CommunityContent";
+import { CommunityCreateContent, CommunityManageContent } from "../components/community/CommunityCreateManage";
+import CommunitySportListContent from "../components/community/CommunitySportListContent";
+import CommunityDetailContent from "../components/community/CommunityDetailContent";
+import CommunityEventDetailContent from "../components/community/CommunityEventDetailContent";
+import {
+  CommunitySparringContent,
+  CommunityCoachingContent,
+  CommunityCompetitionsContent,
+  CommunityLeaderboardContent,
+} from "../components/community/CommunityExtrasContent";
+import OpenPlayHubContent from "../components/open-play/OpenPlayHubContent";
+import OpenPlayCreateContent from "../components/open-play/OpenPlayCreateContent";
+import OpenPlayDetailContent from "../components/open-play/OpenPlayDetailContent";
+import OpenPlayMineContent from "../components/open-play/OpenPlayMineContent";
+import StravaHubContent from "../components/strava/StravaHubContent";
+import StravaActivityDetailContent from "../components/strava/StravaActivityDetailContent";
+import FoodLogHubContent from "../components/food/FoodLogHubContent";
+import FoodManualContent from "../components/food/FoodManualContent";
+import FoodBarcodeContent from "../components/food/FoodBarcodeContent";
+import FoodScanRedirectContent from "../components/food/FoodScanRedirectContent";
+import WorkoutLogHubContent from "../components/workout/WorkoutLogHubContent";
+import WorkoutManualContent from "../components/workout/WorkoutManualContent";
+import WorkoutScanRedirectContent from "../components/workout/WorkoutScanRedirectContent";
+import McuContent from "../components/mcu/McuContent";
+
 
 export function SplashPage() {
   const navigate = useNavigate();
@@ -27,58 +53,80 @@ export function SplashPage() {
   const nextPath = getSession()
     ? (location.state?.next ?? "/home")
     : "/get-started";
-  const [progress, setProgress] = useState(0);
+  const [zoomed, setZoomed] = useState(false);
 
-  const durationMs = 4000;
+  const durationMs = 2400;
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const zoomTimer = setTimeout(() => setZoomed(true), 40);
+    const navTimer = setTimeout(() => {
       navigate(nextPath, { replace: true });
     }, durationMs);
-
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(zoomTimer);
+      clearTimeout(navTimer);
+    };
   }, [navigate, nextPath]);
 
-  useEffect(() => {
-    const tickMs = 40;
-    const step = 100 / (durationMs / tickMs);
-
-    const interval = setInterval(() => {
-      setProgress((prev) => Math.min(100, prev + step));
-    }, tickMs);
-
-    return () => clearInterval(interval);
-  }, [durationMs]);
-
   return (
-    <div className="flex h-dvh min-h-dvh w-full flex-col overflow-hidden bg-[#2D9B64] text-on-primary">
-      <main className="relative mx-auto flex h-full min-h-0 w-full max-w-md flex-1 flex-col items-center justify-between overflow-hidden px-8 py-10 pt-[max(2.5rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))]">
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary-container/20 rounded-[4rem] rotate-45 pointer-events-none" />
-        <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-primary-container/30 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex-1" />
-        <div className="flex flex-col items-center space-y-6 text-center z-10">
-          
-          <div className="space-y-1">
-            <img src="/images/logo-new.jpeg" alt="W.E.L.L Program" className="w-56 max-w-full object-contain" />
-          </div>
-        </div>
-        <div className="flex-1 flex flex-col justify-end w-full max-w-[200px] pb-12 z-10">
-          <div className="space-y-4">
-            <div className="h-[3px] w-full bg-white/20 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-white rounded-full transition-[width] duration-75 ease-linear"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="text-center text-[11px] font-medium text-white/50 font-body tracking-wide">
-              loading... {Math.round(progress)}%
-            </p>
-          </div>
-        </div>
-        <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] text-[10px] text-white/30 font-body uppercase tracking-widest">
-          v 2.4.0
-        </div>
-      </main>
+    <div
+      className="relative flex h-dvh min-h-dvh w-full items-center justify-center overflow-hidden"
+      style={{ backgroundColor: "#1aa35a" }}
+    >
+      {/* Bentuk lengkung soft seperti splash AYO (hijau lebih gelap) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute"
+        style={{
+          top: "-12%",
+          left: "-35%",
+          width: "110%",
+          height: "42%",
+          borderRadius: "0 0 55% 45%",
+          background: "#128a4b",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute"
+        style={{
+          bottom: "-14%",
+          right: "-30%",
+          width: "105%",
+          height: "40%",
+          borderRadius: "50% 40% 0 0",
+          background: "#128a4b",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute"
+        style={{
+          top: "18%",
+          right: "-40%",
+          width: "70%",
+          height: "38%",
+          borderRadius: "48%",
+          background: "#159650",
+          opacity: 0.85,
+        }}
+      />
+
+      <h1
+        className="relative z-10 select-none font-headline font-extrabold italic leading-none text-white"
+        style={{
+          fontSize: "clamp(4.75rem, 24vw, 6.75rem)",
+          letterSpacing: "-0.06em",
+          fontStyle: "italic",
+          transform: zoomed ? "scale(1)" : "scale(0.22)",
+          opacity: zoomed ? 1 : 0,
+          transition:
+            "transform 1.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease-out",
+          willChange: "transform, opacity",
+        }}
+      >
+        WELL
+      </h1>
     </div>
   );
 }
@@ -241,6 +289,102 @@ export function HistoryPage() {
 
 export function HistoryItemDetailPage() {
   return <HistoryItemDetailContent />;
+}
+
+export function CommunityPage() {
+  return <CommunityContent />;
+}
+
+export function CommunityCreatePage() {
+  return <CommunityCreateContent />;
+}
+
+export function CommunityManagePage() {
+  return <CommunityManageContent />;
+}
+
+export function CommunitySportListPage() {
+  return <CommunitySportListContent />;
+}
+
+export function CommunityDetailPage() {
+  return <CommunityDetailContent />;
+}
+
+export function CommunityEventDetailPage() {
+  return <CommunityEventDetailContent />;
+}
+
+export function CommunitySparringPage() {
+  return <CommunitySparringContent />;
+}
+
+export function CommunityCoachingPage() {
+  return <CommunityCoachingContent />;
+}
+
+export function CommunityCompetitionsPage() {
+  return <CommunityCompetitionsContent />;
+}
+
+export function CommunityLeaderboardPage() {
+  return <CommunityLeaderboardContent />;
+}
+
+export function OpenPlayPage() {
+  return <OpenPlayHubContent />;
+}
+
+export function OpenPlayCreatePage() {
+  return <OpenPlayCreateContent />;
+}
+
+export function OpenPlayMinePage() {
+  return <OpenPlayMineContent />;
+}
+
+export function OpenPlayDetailPage() {
+  return <OpenPlayDetailContent />;
+}
+
+export function StravaPage() {
+  return <StravaHubContent />;
+}
+
+export function StravaActivityDetailPage() {
+  return <StravaActivityDetailContent />;
+}
+
+export function FoodLogPage() {
+  return <FoodLogHubContent />;
+}
+
+export function FoodManualPage() {
+  return <FoodManualContent />;
+}
+
+export function FoodBarcodePage() {
+  return <FoodBarcodeContent />;
+}
+
+export function FoodScanPage() {
+  return <FoodScanRedirectContent />;
+}
+
+export function WorkoutLogPage() {
+  return <WorkoutLogHubContent />;
+}
+
+export function WorkoutManualPage() {
+  return <WorkoutManualContent />;
+}
+
+export function WorkoutScanPage() {
+  return <WorkoutScanRedirectContent />;
+}
+
+export function McuPage() {
+  return <McuContent />;
 }
 
 export function HealthPage() {

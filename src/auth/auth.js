@@ -143,6 +143,10 @@ export function logout() {
 async function loginWithNodeApi(usernameOrEmail, password) {
   const identity = String(usernameOrEmail || "").trim();
   const pwd = String(password || "");
+  // Jangan biarkan profil dari login baru memakai JWT milik user sebelumnya.
+  // Login API harus selalu membentuk satu pasangan token + session yang baru.
+  clearAuthToken();
+  localStorage.removeItem(AUTH_SESSION_KEY);
   const prefix = getApiPathPrefix();
   const bases = getApiOriginsToTry();
   let res = /** @type {Response | null} */ (null);

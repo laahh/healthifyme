@@ -1,4 +1,5 @@
 import * as geminiProxyService from "../services/geminiProxy.service.js";
+import * as healthRiskService from "../services/healthRisk.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 function logGeminiRequest(route, req, base64Data) {
@@ -14,7 +15,16 @@ export const postGeminiFood = asyncHandler(async (req, res) => {
     String(mimeType || ""),
     String(base64Data || "")
   );
-  res.json(result);
+  let healthAlert = null;
+  try {
+    const day = await healthRiskService.evaluateDay(req.auth.userId, {
+      pendingMeal: result,
+    });
+    healthAlert = healthRiskService.toHealthAlertPayload(day);
+  } catch (err) {
+    console.warn("[healthRisk] gemini-food evaluateDay:", err?.message || err);
+  }
+  res.json({ ...result, healthAlert });
 });
 
 export const postGeminiWorkout = asyncHandler(async (req, res) => {

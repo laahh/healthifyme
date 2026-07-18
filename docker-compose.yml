@@ -34,9 +34,16 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-min-16-chars-ok}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5174}
+      VERTEX_PROJECT_ID: ${VERTEX_PROJECT_ID:-}
+      VERTEX_LOCATION: ${VERTEX_LOCATION:-us-central1}
+      VERTEX_MODEL: ${VERTEX_MODEL:-gemini-2.0-flash-001}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     # Default 8788: hindari bentrok jika 8787 sudah dipakai di host.
     ports:
       - "${API_PUBLISH_PORT:-8788}:8787"
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-./key.json}:/secrets/sa.json:ro
     depends_on:
       mysql:
         condition: service_healthy

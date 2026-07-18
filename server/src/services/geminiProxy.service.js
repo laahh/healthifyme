@@ -1,9 +1,7 @@
+import { GoogleAuth } from "google-auth-library";
 import { AppError } from "../domain/errors/AppError.js";
 import { env } from "../config/env.js";
 import { normalizeFoodAnalysis } from "../utils/foodAnalysisNormalize.js";
-
-const GEMINI_MODEL = "gemini-2.0-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const FOOD_PROMPT = `Analisis gambar makanan ini secara detail. Estimasi nutrisi untuk SELURUH piring dan daftar tiap komponen.
 
@@ -16,11 +14,13 @@ Balas HANYA JSON valid (tanpa markdown), dengan struktur:
   "carbsG": 180,
   "fiberG": 23,
   "waterMl": 350,
+  "sugarG": 28,
   "vitA_RE": 400,
   "vitD_mcg": 2.5,
   "vitE_mg": 5,
   "vitK_mcg": 15,
   "vitC_mg": 30,
+  "riskTags": ["high_sugar"],
   "nutritionNotes": "1-2 kalimat saran konsumsi yang actionable dalam Bahasa Indonesia (contoh: kurangi gorengan/berminyak, tambah sayur, atur porsi, batasi santan/gula/garam sesuai konteks makanan)",
   "items": [
     { "name": "Nasi putih", "detail": "1 mangkuk • 200 kkal" },
@@ -29,8 +29,10 @@ Balas HANYA JSON valid (tanpa markdown), dengan struktur:
 }
 
 Aturan:
-- totalCalories = estimasi TOTAL energi (kilokalori) seluruh makanan.
+- totalCalories = estimasi total energi (kilokalori) seluruh makanan.
 - proteinG, fatsG, carbsG = gram; fiberG = gram; waterMl = mililiter air perkiraan dari makanan/minuman dalam gambar.
+- sugarG = estimasi gula bebas/tambahan (gram) untuk seluruh piring; null jika tidak bisa diperkirakan.
+- riskTags = array string dari subset: "high_sugar", "high_fat", "high_calorie", "high_sodium" (kosong [] jika tidak relevan).
 - vitA_RE = Retinol Ekuivalen (RE); vitD_mcg, vitK_mcg, vitC_mcg, vitE_mg sesuai satuan di kunci (perkirakan jika tidak ada data pasti).
 - Gunakan null untuk angka yang benar-benar tidak bisa diperkirakan (bukan 0 sembarangan).
 - nutritionNotes WAJIB berupa saran praktis konsumsi, bukan disclaimer umum.
@@ -59,16 +61,68 @@ Balas HANYA JSON valid (tanpa markdown), dengan struktur persis:
 }
 Gunakan string kosong "" jika field tidak terbaca. summaryText wajib berisi ringkasan lengkap yang bisa dibaca manusia.`;
 
+/** @type {GoogleAuth | null} */
+let vertexAuth = null;
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function requireGeminiKey() {
-  const key = String(env.GEMINI_API_KEY || "").trim();
-  if (!key) {
-    throw new AppError(503, "Fitur AI belum dikonfigurasi di server (GEMINI_API_KEY).");
+function useVertex() {
+  return Boolean(String(env.VERTEX_PROJECT_ID || "").trim());
+}
+
+function assertAiConfigured() {
+  if (useVertex()) return;
+  if (String(env.GEMINI_API_KEY || "").trim()) return;
+  throw new AppError(
+    503,
+    "Fitur AI belum dikonfigurasi di server. Set VERTEX_PROJECT_ID (+ GOOGLE_APPLICATION_CREDENTIALS) atau GEMINI_API_KEY."
+  );
+}
+
+function getVertexAuth() {
+  if (!vertexAuth) {
+    vertexAuth = new GoogleAuth({
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
   }
-  return key;
+  return vertexAuth;
+}
+
+async function getVertexAccessToken() {
+  try {
+    const client = await getVertexAuth().getClient();
+    const tokenResponse = await client.getAccessToken();
+    const token = typeof tokenResponse === "string" ? tokenResponse : tokenResponse?.token;
+    if (!token) {
+      throw new AppError(
+        503,
+        "Vertex AI: gagal mendapatkan access token. Set GOOGLE_APPLICATION_CREDENTIALS ke file service account JSON."
+      );
+    }
+    return token;
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    const msg = err?.message ? String(err.message).slice(0, 200) : "auth gagal";
+    throw new AppError(503, `Vertex AI auth gagal: ${msg}`);
+  }
+}
+
+function buildVertexUrl() {
+  const project = String(env.VERTEX_PROJECT_ID).trim();
+  const location = String(env.VERTEX_LOCATION || "us-central1").trim() || "us-central1";
+  const model = String(env.VERTEX_MODEL || "gemini-2.0-flash-001").trim() || "gemini-2.0-flash-001";
+  const host =
+    location === "global"
+      ? "https://aiplatform.googleapis.com"
+      : `https://${location}-aiplatform.googleapis.com`;
+  return `${host}/v1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent`;
+}
+
+function buildStudioUrl() {
+  const model = "gemini-2.0-flash";
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 }
 
 /**
@@ -78,19 +132,19 @@ function requireGeminiKey() {
  * @param {{ responseMimeType?: string }} [gen]
  */
 async function generateWithImage(promptText, mimeType, base64Data, gen = {}) {
-  const key = requireGeminiKey();
+  assertAiConfigured();
   const responseMimeType = gen.responseMimeType ?? "application/json";
+  const vertex = useVertex();
+
   const body = JSON.stringify({
     contents: [
       {
+        role: "user",
         parts: [
           { text: promptText.trim() },
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: base64Data,
-            },
-          },
+          vertex
+            ? { inlineData: { mimeType, data: base64Data } }
+            : { inline_data: { mime_type: mimeType, data: base64Data } },
         ],
       },
     ],
@@ -100,29 +154,43 @@ async function generateWithImage(promptText, mimeType, base64Data, gen = {}) {
     },
   });
 
+  /** @type {Record<string, string>} */
+  const headers = { "Content-Type": "application/json" };
+  let url = "";
+
+  if (vertex) {
+    const token = await getVertexAccessToken();
+    headers.Authorization = `Bearer ${token}`;
+    url = buildVertexUrl();
+  } else {
+    const key = String(env.GEMINI_API_KEY || "").trim();
+    url = `${buildStudioUrl()}?key=${encodeURIComponent(key)}`;
+  }
+
   let response = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    response = await fetch(`${GEMINI_URL}?key=${encodeURIComponent(key)}`, {
+    response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body,
     });
 
     if (response.ok) break;
-    if (response.status === 429 && attempt < 2) {
+    if ((response.status === 429 || response.status === 503) && attempt < 2) {
       await wait(800 * (attempt + 1));
       continue;
     }
 
     const detail = await response.text().catch(() => "");
+    const label = vertex ? "Vertex AI" : "Gemini";
     throw new AppError(
       response.status === 429 ? 429 : 502,
-      `Gemini gagal (${response.status})${detail ? `: ${detail.slice(0, 240)}` : ""}`
+      `${label} gagal (${response.status})${detail ? `: ${detail.slice(0, 240)}` : ""}`
     );
   }
 
   if (!response || !response.ok) {
-    throw new AppError(502, "Gemini tidak merespons.");
+    throw new AppError(502, "AI tidak merespons.");
   }
 
   const data = await response.json();

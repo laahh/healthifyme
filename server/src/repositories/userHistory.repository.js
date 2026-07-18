@@ -39,6 +39,30 @@ export async function listHistoryByUserId(userId, limit = 200) {
 /**
  * @param {string} userId
  * @param {string} itemId
+ */
+export async function findHistoryItem(userId, itemId) {
+  const uid = parseBigIntId(userId);
+  if (uid == null) return null;
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT item_id, payload, created_at
+     FROM user_history
+     WHERE user_id = :userId AND item_id = :itemId
+     LIMIT 1`,
+    { userId: uid, itemId: String(itemId) }
+  );
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row) return null;
+  return {
+    item_id: row.item_id,
+    payload: parsePayload(row.payload),
+    created_at: row.created_at,
+  };
+}
+
+/**
+ * @param {string} userId
+ * @param {string} itemId
  * @param {object} payload
  * @param {Date | number | string} [createdAt]
  */

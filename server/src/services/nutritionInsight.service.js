@@ -1,5 +1,6 @@
 import * as foodRepo from "../repositories/foodAnalysis.repository.js";
 import { mondayOfWeekIso, addDaysIso } from "./workoutInsight.service.js";
+import * as healthRiskService from "./healthRisk.service.js";
 
 const DAY_LABELS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 
@@ -30,6 +31,14 @@ function numNullable(v) {
   if (v == null || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function localTodayYmd() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 /**
@@ -76,7 +85,18 @@ export async function getWeeklyFoodSummary(userId, refDateStr) {
   const countedCalSum = countedDays.reduce((s, d) => s + d.calories_kcal, 0);
   const avgCaloriesPerDay =
     countedDays.length > 0 ? Math.round((countedCalSum / countedDays.length) * 10) / 10 : 0;
-  const dailyTarget = 2250;
+
+  const anchorDate = refDateStr && /^\d{4}-\d{2}-\d{2}$/.test(refDateStr) ? refDateStr : monday;
+  let dailyTarget = healthRiskService.DEFAULT_DAILY_CALORIE_TARGET;
+  let targetSource = "default";
+  try {
+    const targets = await healthRiskService.resolveDailyTargets(userId, anchorDate);
+    dailyTarget = targets.calorie_kcal || dailyTarget;
+    targetSource = targets.source;
+  } catch {
+    /* keep default */
+  }
+
   const targetForProgress = dailyTarget * (countedDays.length || 1);
   const progressPct =
     countedDays.length > 0 ? Math.round((countedCalSum / targetForProgress) * 100) : 0;
@@ -92,6 +112,7 @@ export async function getWeeklyFoodSummary(userId, refDateStr) {
     avg_calories_per_day: avgCaloriesPerDay,
     progress_pct: progressPct,
     daily_target_kcal: dailyTarget,
+    target_source: targetSource,
   };
 }
 
@@ -189,9 +210,41 @@ export async function getDailyFoodSummary(userId, dateStr) {
     };
   });
 
+  const targets = await healthRiskService.resolveDailyTargets(userId, dateStr);
+  let healthAlert = null;
+  let nutritionStory = null;
+  try {
+    const day = await healthRiskService.evaluateDay(userId, { date: dateStr });
+    healthAlert = healthRiskService.toHealthAlertPayload(day);
+    nutritionStory = healthRiskService.buildNutritionStory(day, totals, {
+      date: dateStr,
+      isToday: dateStr === localTodayYmd(),
+      targets,
+    });
+  } catch (err) {
+    console.warn("[healthRisk] daily-summary:", err?.message || err);
+    nutritionStory = healthRiskService.buildNutritionStory(
+      {
+        date: dateStr,
+        profile: { flags: [], sources: [], hasMcu: false },
+        alerts: [],
+        riskyMealCount: 0,
+        mealCount: items.length,
+        severity: null,
+        primary: null,
+        mealScore: null,
+      },
+      totals,
+      { date: dateStr, isToday: dateStr === localTodayYmd(), targets }
+    );
+  }
+
   return {
     date: dateStr,
     totals,
     items,
+    targets,
+    healthAlert,
+    nutritionStory,
   };
 }

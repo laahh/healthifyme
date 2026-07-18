@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 import { apiRequest, isApiBackendEnabled } from "../../lib/apiClient";
+import { getSessionUser } from "../../auth/auth";
+import { CommunityShell } from "../community/CommunityShell";
+import GoalDailyPanel from "../goal/GoalDailyPanel";
+import GoalProgressPanel from "../goal/GoalProgressPanel";
 
-const SWAL_CONFIRM = "#15803d";
+const SWAL_CONFIRM = "#006a3f";
+
+const HERO_IMG =
+  "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1200&auto=format&fit=crop";
 
 const GOAL_ICONS = {
-  WEIGHT_LOSS: "monitor_weight_loss",
+  WEIGHT_LOSS: "monitor_weight",
   MAINTAIN_WEIGHT: "balance",
   MUSCLE_GAIN: "fitness_center",
   ACTIVE_LIFESTYLE: "directions_run",
@@ -22,14 +29,6 @@ function localToday() {
   return `${y}-${m}-${day}`;
 }
 
-function categoryLabel(cat) {
-  const c = String(cat || "");
-  if (c === "excellent") return { text: "Excellent", cls: "bg-emerald-100 text-emerald-800" };
-  if (c === "good") return { text: "Good", cls: "bg-green-100 text-green-800" };
-  if (c === "need_improvement") return { text: "Perlu ditingkatkan", cls: "bg-amber-100 text-amber-900" };
-  return { text: "Perlu perhatian", cls: "bg-red-100 text-red-800" };
-}
-
 /**
  * @param {Record<string, unknown>} form
  * @param {string} selectedCode
@@ -38,7 +37,7 @@ function categoryLabel(cat) {
  */
 function evaluateGoalForm(form, selectedCode, goalTypes) {
   const code = String(selectedCode || "").trim();
-  const typeName = goalTypes.find((g) => g.code === code)?.name || code || "—";
+  const typeName = goalTypes.find((g) => g.code === code)?.name || code || "â€”";
   const h = parseFloat(String(form.height_cm ?? "").replace(",", "."));
   const w = parseFloat(String(form.weight_kg ?? "").replace(",", "."));
   const sw = parseFloat(String(form.start_weight_kg ?? "").replace(",", "."));
@@ -62,12 +61,12 @@ function evaluateGoalForm(form, selectedCode, goalTypes) {
     {
       label: "Tinggi badan (cm)",
       ok: Number.isFinite(h) && h >= 100 && h <= 250,
-      hint: Number.isFinite(h) ? `${h} cm` : "Isi 100–250",
+      hint: Number.isFinite(h) ? `${h} cm` : "Isi 100â€“250",
     },
     {
       label: "Berat badan profil (kg)",
       ok: Number.isFinite(w) && w >= 30 && w <= 300,
-      hint: Number.isFinite(w) ? `${w} kg` : "Isi 30–300",
+      hint: Number.isFinite(w) ? `${w} kg` : "Isi 30â€“300",
     },
     {
       label: "Tanggal mulai",
@@ -76,18 +75,18 @@ function evaluateGoalForm(form, selectedCode, goalTypes) {
     },
     {
       label: "Tanggal selesai",
-      ok: Boolean(endD && dateRe.test(endD)),
-      hint: endD || "YYYY-MM-DD",
+      ok: Boolean(endD && dateRe.test(endD) && (!startD || endD > startD)),
+      hint: endD ? (startD && endD <= startD ? "Harus setelah tanggal mulai" : endD) : "YYYY-MM-DD",
     },
     {
       label: "Berat awal goal (kg)",
       ok: Number.isFinite(sw) && sw >= 30 && sw <= 300,
-      hint: Number.isFinite(sw) ? `${sw} kg` : "Isi 30–300",
+      hint: Number.isFinite(sw) ? `${sw} kg` : "Isi 30â€“300",
     },
     {
       label: "Target berat (kg)",
       ok: Number.isFinite(tw) && tw >= 30 && tw <= 300,
-      hint: Number.isFinite(tw) ? `${tw} kg` : "Isi 30–300",
+      hint: Number.isFinite(tw) ? `${tw} kg` : "Isi 30â€“300",
     },
   ];
 
@@ -96,7 +95,7 @@ function evaluateGoalForm(form, selectedCode, goalTypes) {
     items.push({
       label: "Usia (opsional)",
       ok: Number.isFinite(age) && age >= 15 && age <= 100,
-      hint: Number.isFinite(age) ? `${age} tahun` : "15–100 atau kosongkan",
+      hint: Number.isFinite(age) ? `${age} tahun` : "15â€“100 atau kosongkan",
     });
   }
 
@@ -108,17 +107,21 @@ function swalFormIncompleteHtml(items) {
   const filled = items.filter((i) => i.ok);
   const missing = items.filter((i) => !i.ok);
   const row = (i, done) =>
-    `<li style="margin:6px 0;line-height:1.35"><span style="color:${done ? "#15803d" : "#b91c1c"};font-weight:700">${done ? "✓" : "○"}</span> <strong>${i.label}</strong><br/><span style="font-size:12px;color:#64748b">${i.hint}</span></li>`;
+    `<li style="margin:6px 0;line-height:1.35"><span style="color:${done ? "#006a3f" : "#b91c1c"};font-weight:700">${done ? "âœ“" : "â—‹"}</span> <strong>${i.label}</strong><br/><span style="font-size:12px;color:#64748b">${i.hint}</span></li>`;
   return `
     <div style="text-align:left;font-size:14px;max-height:55vh;overflow:auto">
-      <p style="margin:0 0 8px;font-weight:700;color:#15803d">Sudah diisi (${filled.length})</p>
-      <ul style="margin:0 0 16px;padding-left:18px;list-style:none">${filled.map((i) => row(i, true)).join("") || '<li style="color:#64748b">—</li>'}</ul>
+      <p style="margin:0 0 8px;font-weight:700;color:#006a3f">Sudah diisi (${filled.length})</p>
+      <ul style="margin:0 0 16px;padding-left:18px;list-style:none">${filled.map((i) => row(i, true)).join("") || '<li style="color:#64748b">â€”</li>'}</ul>
       <p style="margin:0 0 8px;font-weight:700;color:#b91c1c">Belum lengkap (${missing.length})</p>
-      <ul style="margin:0;padding-left:18px;list-style:none">${missing.map((i) => row(i, false)).join("") || '<li style="color:#64748b">—</li>'}</ul>
+      <ul style="margin:0;padding-left:18px;list-style:none">${missing.map((i) => row(i, false)).join("") || '<li style="color:#64748b">â€”</li>'}</ul>
     </div>`;
 }
 
 export default function GoalPlannerContent() {
+  const navigate = useNavigate();
+  const sessionUser = getSessionUser();
+  const myUserId = sessionUser?.id != null ? String(sessionUser.id) : null;
+
   const [tab, setTab] = useState("plan");
   const [planStep, setPlanStep] = useState("pick");
   const [loading, setLoading] = useState(true);
@@ -130,7 +133,9 @@ export default function GoalPlannerContent() {
   const [draftGoalId, setDraftGoalId] = useState(null);
   const [summary, setSummary] = useState(null);
   const [dashboard, setDashboard] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [progressLoading, setProgressLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
@@ -196,30 +201,52 @@ export default function GoalPlannerContent() {
   const loadDashboard = useCallback(async () => {
     if (!apiOk || !activeGoal) return;
     const d = localToday();
+    setDashboardLoading(true);
     try {
       const dash = await apiRequest(`/me/goals/dashboard?date=${encodeURIComponent(d)}`);
+      if (dash?.user_id != null && myUserId != null && String(dash.user_id) !== myUserId) {
+        setDashboard(null);
+        setError("Sesi tidak cocok. Silakan muat ulang atau login kembali.");
+        return;
+      }
       setDashboard(dash);
     } catch (e) {
       setError(e?.message || "Gagal memuat dashboard.");
+    } finally {
+      setDashboardLoading(false);
     }
-  }, [apiOk, activeGoal]);
+  }, [apiOk, activeGoal, myUserId]);
 
   const loadProgress = useCallback(async () => {
     if (!apiOk || !activeGoal) return;
+    setProgressLoading(true);
     try {
       const p = await apiRequest("/me/goals/progress?days=30");
+      if (p?.user_id != null && myUserId != null && String(p.user_id) !== myUserId) {
+        setProgress(null);
+        setError("Sesi tidak cocok. Silakan muat ulang atau login kembali.");
+        return;
+      }
       setProgress(p);
     } catch (e) {
       setError(e?.message || "Gagal memuat progres.");
+    } finally {
+      setProgressLoading(false);
     }
-  }, [apiOk, activeGoal]);
+  }, [apiOk, activeGoal, myUserId]);
 
   useEffect(() => {
-    if (tab === "daily") loadDashboard();
+    if (tab === "daily") {
+      setError("");
+      loadDashboard();
+    }
   }, [tab, loadDashboard]);
 
   useEffect(() => {
-    if (tab === "progress") loadProgress();
+    if (tab === "progress") {
+      setError("");
+      loadProgress();
+    }
   }, [tab, loadProgress]);
 
   const handleGeneratePlan = async () => {
@@ -279,6 +306,9 @@ export default function GoalPlannerContent() {
         activity_level: form.activity_level,
         exercise_preferences: form.exercise_preferences?.trim() || undefined,
         food_restrictions: form.food_restrictions?.trim() || undefined,
+        gender: form.gender || undefined,
+        height_cm: Number.isFinite(h) ? h : undefined,
+        weight_kg: Number.isFinite(w) ? w : undefined,
       };
       const age = parseInt(String(form.age_years).trim(), 10);
       if (Number.isFinite(age) && age >= 15 && age <= 100) body.age_years = age;
@@ -344,604 +374,483 @@ export default function GoalPlannerContent() {
     }
   };
 
+  const draftGoals = useMemo(() => goals.filter((g) => g.status === "draft"), [goals]);
+
+  const handleContinueDraft = async (goalId) => {
+    if (!goalId || !apiOk) return;
+    setSaving(true);
+    setError("");
+    try {
+      const sum = await apiRequest(`/me/goals/${encodeURIComponent(goalId)}/summary`);
+      setDraftGoalId(goalId);
+      setSummary(sum);
+      setTab("plan");
+      setPlanStep("summary");
+    } catch (e) {
+      const msg = e?.message || "Gagal memuat draft rencana.";
+      setError(msg);
+      await Swal.fire({
+        icon: "error",
+        title: "Gagal memuat draft",
+        text: msg,
+        confirmButtonColor: SWAL_CONFIRM,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const goToScanWorkout = () => {
+    navigate("/home", { state: { openActivityCapture: true } });
+  };
+
+  const goToScanFood = () => {
+    navigate("/home", { state: { openFoodCapture: true } });
+  };
+
   const aggressiveWarn = form.intensity_level === "aggressive";
 
-  const lastScores = useMemo(() => {
-    const arr = progress?.scores || [];
-    return arr.slice(-7);
-  }, [progress]);
-
-  const maxScore = useMemo(() => {
-    const m = Math.max(1, ...lastScores.map((s) => Number(s.total_score) || 0));
-    return m;
-  }, [lastScores]);
-
   return (
-    <div className="bg-surface text-on-surface antialiased max-w-[375px] mx-auto min-h-screen relative pb-28">
-      <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-emerald-50/80 backdrop-blur-xl no-border shadow-none max-w-[375px] mx-auto">
-        <Link
-          to="/home"
-          className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-emerald-100/50 transition-colors active:scale-95 duration-150"
-        >
-          <span className="material-symbols-outlined text-emerald-700">arrow_back</span>
-        </Link>
-        <span className="text-2xl font-black tracking-tighter text-emerald-800">Goal Planner</span>
-        <button
-          type="button"
-          onClick={() => loadAll()}
-          className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-emerald-100/50 transition-colors"
-        >
-          <span className="material-symbols-outlined text-emerald-700">refresh</span>
-        </button>
-      </header>
+    <CommunityShell className="bg-surface">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-surface pb-[max(1.5rem,env(safe-area-inset-bottom))]">
 
-      <main className="pt-20 px-4">
-        <div className="flex rounded-2xl bg-surface-container-low p-1 mb-4 border border-outline-variant/10">
-          {[
-            { id: "plan", label: "Rencana" },
-            { id: "daily", label: "Hari ini" },
-            { id: "progress", label: "Progres" },
-          ].map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors ${
-                tab === t.id ? "bg-primary text-white shadow-md shadow-primary/20" : "text-on-surface-variant"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {!apiOk && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 mb-4">
-            Backend API belum dikonfigurasi. Tambahkan <code className="text-xs">VITE_API_URL</code> dan jalankan migrasi MySQL{" "}
-            <code className="text-xs">006_goal_planner.sql</code>.
-          </div>
-        )}
-
-        {loading && (
-          <div className="flex flex-col items-center gap-3 py-16">
-            <div className="size-10 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin" />
-            <p className="text-sm font-semibold text-emerald-700">Memuat…</p>
-          </div>
-        )}
-
-        {error && !loading && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 mb-4">{error}</div>
-        )}
-
-        {!loading && tab === "plan" && (
-          <div className="space-y-4 pb-8">
-            {activeGoal && (
-              <div className="rounded-2xl bg-primary/10 border border-primary/20 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-primary">Goal aktif</p>
-                <p className="font-bold text-on-surface mt-1">{activeGoal.goal_name}</p>
-                <p className="text-xs text-on-surface-variant mt-1">
-                  {activeGoal.start_date} → {activeGoal.target_date} · {activeGoal.goal_type_name}
-                </p>
-              </div>
-            )}
-
-            {planStep === "pick" && (
-              <>
-                <h2 className="text-lg font-extrabold text-on-surface px-1">Pilih tujuanmu</h2>
-                <div className="grid grid-cols-1 gap-3">
-                  {goalTypes.length === 0 && apiOk && (
-                    <p className="text-sm text-on-surface-variant px-1">Belum ada tipe goal. Jalankan seed migrasi.</p>
-                  )}
-                  {goalTypes.map((g) => (
-                    <button
-                      key={g.code}
-                      type="button"
-                      onClick={() => {
-                        setSelectedCode(g.code);
-                        setPlanStep("form");
-                      }}
-                      className={`text-left rounded-2xl border p-4 flex gap-3 transition-colors ${
-                        selectedCode === g.code
-                          ? "border-primary bg-primary/5"
-                          : "border-outline-variant/20 bg-white shadow-sm"
-                      }`}
-                    >
-                      <div className="size-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700 shrink-0">
-                        <span className="material-symbols-outlined">
-                          {GOAL_ICONS[g.code] || "flag"}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-bold">{g.name}</p>
-                        <p className="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{g.description}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {planStep === "form" && (
-              <div className="space-y-4">
+        {/* â”€â”€ Hero â”€â”€ */}
+        <section className="relative">
+          <div className="relative h-[220px] overflow-hidden">
+            <img
+              src={HERO_IMG}
+              alt=""
+              className="absolute inset-0 size-full object-cover object-[center_30%]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/35 to-black/75" />
+            <div className="relative z-10 flex h-full flex-col px-4 pt-[max(0.85rem,env(safe-area-inset-top))] pb-14">
+              <div className="flex items-center justify-between">
+                <Link
+                  to="/home"
+                  className="flex size-9 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-[2px]"
+                  aria-label="Kembali"
+                >
+                  <span className="material-symbols-outlined text-[22px]">arrow_back</span>
+                </Link>
                 <button
                   type="button"
-                  onClick={() => setPlanStep("pick")}
-                  className="text-sm font-semibold text-primary flex items-center gap-1"
+                  onClick={() => loadAll()}
+                  className="flex size-9 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-[2px]"
+                  aria-label="Muat ulang"
                 >
-                  <span className="material-symbols-outlined text-lg">arrow_back</span> Ganti tipe goal
+                  <span className="material-symbols-outlined text-[20px]">refresh</span>
                 </button>
+              </div>
+            </div>
+          </div>
 
-                <section className="rounded-2xl bg-white border border-slate-100 p-4 space-y-3 shadow-sm">
-                  <h3 className="font-bold text-sm">Data fisik & profil</h3>
-                  <p className="text-xs text-on-surface-variant">
-                    Data ini disimpan ke profil Anda untuk perhitungan BMR/TDEE.
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs font-semibold col-span-2">
-                      Gender
-                      <select
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                        value={form.gender}
-                        onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
-                      >
-                        <option value="">Pilih</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold">
-                      Tinggi (cm)
-                      <input
-                        type="number"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                        value={form.height_cm}
-                        onChange={(e) => setForm((f) => ({ ...f, height_cm: e.target.value }))}
-                      />
-                    </label>
-                    <label className="text-xs font-semibold">
-                      Berat profil (kg)
-                      <input
-                        type="number"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                        value={form.weight_kg}
-                        onChange={(e) => setForm((f) => ({ ...f, weight_kg: e.target.value }))}
-                      />
-                    </label>
-                    <label className="text-xs font-semibold col-span-2">
-                      Usia (jika tidak ada di data karyawan)
-                      <input
-                        type="number"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                        placeholder="Opsional"
-                        value={form.age_years}
-                        onChange={(e) => setForm((f) => ({ ...f, age_years: e.target.value }))}
-                      />
-                    </label>
+          {/* icon bulat overlap hero â€” persis pola di gambar */}
+          <div className="relative z-20 -mt-9 flex flex-col items-center">
+            <div className="size-[72px] overflow-hidden rounded-full border-[3px] border-white bg-primary shadow-[0_4px_16px_rgba(15,23,42,0.22)] flex items-center justify-center">
+              <span className="material-symbols-outlined text-[38px] text-white">fitness_center</span>
+            </div>
+            <h1 className="mt-3 text-[22px] font-extrabold leading-none tracking-tight text-slate-900">
+              Goal Planner
+            </h1>
+            <p className="mt-1 text-[13px] text-slate-500">
+              {activeGoal ? activeGoal.goal_type_name : "Belum ada goal aktif"} Â· {activeGoal ? `${activeGoal.start_date} s/d ${activeGoal.target_date}` : "Buat rencana baru"}
+            </p>
+          </div>
+
+          {/* â”€â”€ Tombol aksi â”€â”€ */}
+          <div className="mt-4 flex gap-2.5 px-4">
+            <button
+              type="button"
+              onClick={() => { setTab("plan"); setPlanStep("pick"); }}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-primary py-2.5 text-[13px] font-bold text-primary active:scale-[0.99] transition-transform"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              Buat Rencana
+            </button>
+            <button
+              type="button"
+              onClick={goToScanWorkout}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary/10 py-2.5 text-[13px] font-bold text-primary active:scale-[0.99] transition-transform"
+            >
+              <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+              Scan Foto
+            </button>
+            <button
+              type="button"
+              onClick={goToScanFood}
+              className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white ring-1 ring-slate-200 text-slate-700 active:scale-[0.99] transition-transform"
+              aria-label="Log makanan"
+            >
+              <span className="material-symbols-outlined text-[20px]">restaurant</span>
+            </button>
+          </div>
+
+          {/* â”€â”€ Stats bar â€” persis "1/8 Players Â· 7 Spots Â· Open" â”€â”€ */}
+          <div className="mx-4 mt-3 flex items-center divide-x divide-slate-100 overflow-hidden rounded-2xl bg-white shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+            <div className="flex flex-1 flex-col items-center py-3">
+              <span className="text-[13px] font-extrabold text-slate-900">{activeGoal ? "1" : "0"}</span>
+              <span className="mt-0.5 text-[10px] text-slate-500">Goal Aktif</span>
+            </div>
+            <div className="flex flex-1 flex-col items-center py-3">
+              <span className="text-[13px] font-extrabold text-slate-900">{draftGoals.length}</span>
+              <span className="mt-0.5 text-[10px] text-slate-500">Draft</span>
+            </div>
+            <div className="flex flex-1 flex-col items-center py-3">
+              <span className="text-[13px] font-extrabold text-primary">
+                {dashboard?.score ? Math.round(dashboard.score.total_score) : "â€”"}
+              </span>
+              <span className="mt-0.5 text-[10px] text-slate-500">Skor Hari Ini</span>
+            </div>
+          </div>
+
+          {/* â”€â”€ Tab navigasi â”€â”€ */}
+          <div className="mt-4 px-4">
+            <div className="flex gap-0 overflow-hidden rounded-2xl bg-white shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+              {[
+                { id: "plan", label: "Rencana" },
+                { id: "daily", label: "Hari ini" },
+                { id: "progress", label: "Progres" },
+              ].map((t, i, arr) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`flex flex-1 items-center justify-center py-2.5 text-[13px] font-bold transition-all ${
+                    tab === t.id
+                      ? "bg-primary text-white"
+                      : "text-slate-500"
+                  } ${
+                    i < arr.length - 1 ? "border-r border-slate-100" : ""
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* â”€â”€ Konten tab â”€â”€ */}
+        <div className="px-4 pt-4 space-y-3">
+
+          {/* Aksi sekunder */}
+          {tab === "plan" && planStep === "pick" && (
+            <div className="flex gap-2.5">
+              <Link
+                to="/workout"
+                className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3 py-3 text-slate-800 shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100 active:scale-[0.99] transition-transform"
+              >
+                <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <span className="material-symbols-outlined text-[18px]">exercise</span>
+                </span>
+                <span className="text-[13px] font-semibold">Log Olahraga</span>
+              </Link>
+              <Link
+                to="/food"
+                className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3 py-3 text-slate-800 shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100 active:scale-[0.99] transition-transform"
+              >
+                <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <span className="material-symbols-outlined text-[18px]">nutrition</span>
+                </span>
+                <span className="text-[13px] font-semibold">Log Makanan</span>
+              </Link>
+            </div>
+          )}
+
+          {!apiOk && (
+            <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900">
+              Backend API belum dikonfigurasi. Set <code className="text-[11px]">VITE_API_URL</code> dan pastikan migrasi goal sudah dijalankan.
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex flex-col items-center gap-3 py-16">
+              <div className="size-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+              <p className="text-sm font-semibold text-slate-600">Memuatâ€¦</p>
+            </div>
+          )}
+
+          {error && !loading && (
+            <p className="mx-0 rounded-2xl border border-red-100 bg-red-50 px-3 py-2.5 text-[12px] text-red-800">
+              {error}
+            </p>
+          )}
+
+          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: RENCANA â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {!loading && tab === "plan" && (
+            <div className="space-y-3 pb-6">
+
+              {/* Goal aktif */}
+              {activeGoal && (
+                <div className="rounded-2xl bg-white shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+                  <div className="px-4 pt-4 pb-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Goal aktif</p>
+                    <p className="mt-1 text-[16px] font-extrabold text-slate-900">{activeGoal.goal_name}</p>
                   </div>
-                </section>
-
-                <section className="rounded-2xl bg-white border border-slate-100 p-4 space-y-3 shadow-sm">
-                  <h3 className="font-bold text-sm">Target goal</h3>
-                  <label className="text-xs font-semibold block">
-                    Nama goal (opsional)
-                    <input
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      value={form.goal_name}
-                      onChange={(e) => setForm((f) => ({ ...f, goal_name: e.target.value }))}
-                    />
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs font-semibold">
-                      Mulai
-                      <input
-                        type="date"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-2 py-2 text-sm"
-                        value={form.start_date}
-                        onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
-                      />
-                    </label>
-                    <label className="text-xs font-semibold">
-                      Selesai
-                      <input
-                        type="date"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-2 py-2 text-sm"
-                        value={form.target_date}
-                        onChange={(e) => setForm((f) => ({ ...f, target_date: e.target.value }))}
-                      />
-                    </label>
-                    <label className="text-xs font-semibold">
-                      Berat awal (kg)
-                      <input
-                        type="number"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                        value={form.start_weight_kg}
-                        onChange={(e) => setForm((f) => ({ ...f, start_weight_kg: e.target.value }))}
-                      />
-                    </label>
-                    <label className="text-xs font-semibold">
-                      Target berat (kg)
-                      <input
-                        type="number"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                        value={form.target_weight_kg}
-                        onChange={(e) => setForm((f) => ({ ...f, target_weight_kg: e.target.value }))}
-                      />
-                    </label>
+                  <div className="flex items-center gap-3 border-t border-slate-100 px-4 py-3">
+                    <span className="material-symbols-outlined text-[20px] text-slate-400">flag</span>
+                    <span className="flex-1 text-[13px] text-slate-600">{activeGoal.goal_type_name} Â· {activeGoal.start_date} â†’ {activeGoal.target_date}</span>
+                    <button type="button" onClick={() => setTab("daily")} className="text-[12px] font-semibold text-primary">
+                      Lihat
+                    </button>
                   </div>
-                </section>
+                </div>
+              )}
 
-                <section className="rounded-2xl bg-white border border-slate-100 p-4 space-y-3 shadow-sm">
-                  <h3 className="font-bold text-sm">Intensitas & aktivitas</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {["easy", "normal", "aggressive"].map((i) => (
+              {/* Drafts */}
+              {planStep === "pick" && draftGoals.length > 0 && (
+                <div className="space-y-2">
+                  <p className="px-0.5 text-[12px] font-bold uppercase tracking-wide text-slate-500">Rencana draft</p>
+                  {draftGoals.map((g) => (
+                    <div key={g.id} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+                      <span className="material-symbols-outlined text-[20px] text-slate-400">draft</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-bold text-slate-900">{g.goal_name}</p>
+                        <p className="text-[11px] text-slate-500">{g.start_date} â†’ {g.target_date}</p>
+                      </div>
                       <button
-                        key={i}
                         type="button"
-                        onClick={() => setForm((f) => ({ ...f, intensity_level: i }))}
-                        className={`px-4 py-2 rounded-full text-xs font-bold capitalize border ${
-                          form.intensity_level === i
-                            ? "bg-primary text-white border-primary"
-                            : "bg-surface-container-low border-slate-200"
+                        disabled={saving}
+                        onClick={() => handleContinueDraft(g.id)}
+                        className="rounded-full border border-primary px-3 py-1 text-[11px] font-bold text-primary disabled:opacity-50"
+                      >
+                        Lanjutkan
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pilih tipe goal */}
+              {planStep === "pick" && (
+                <>
+                  <p className="px-0.5 text-[17px] font-bold text-slate-900">Pilih tujuanmu</p>
+                  {goalTypes.length === 0 && apiOk && (
+                    <p className="rounded-2xl bg-white px-4 py-6 text-center text-[13px] text-slate-500 shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+                      Belum ada tipe goal. Jalankan seed migrasi.
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 gap-2">
+                    {goalTypes.map((g) => (
+                      <button
+                        key={g.code}
+                        type="button"
+                        onClick={() => { setSelectedCode(g.code); setPlanStep("form"); }}
+                        className={`flex items-center gap-3 rounded-2xl bg-white p-3.5 text-left shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 transition-all active:scale-[0.99] ${
+                          selectedCode === g.code ? "ring-primary/40" : "ring-slate-100"
                         }`}
                       >
-                        {i}
+                        <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+                          <span className="material-symbols-outlined text-[20px]">{GOAL_ICONS[g.code] || "flag"}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[14px] font-bold text-slate-900">{g.name}</p>
+                          <p className="mt-0.5 text-[12px] leading-relaxed text-slate-500">{g.description}</p>
+                        </div>
+                        <span className="material-symbols-outlined text-slate-300">chevron_right</span>
                       </button>
                     ))}
                   </div>
-                  {aggressiveWarn && (
-                    <p className="text-xs text-amber-800 bg-amber-50 rounded-xl p-3 border border-amber-100">
-                      Intensitas agresif menyesuaikan defisit/surplus lebih kuat. Pastikan Anda sehat cukup dan konsultasi
-                      profesional bila perlu.
-                    </p>
-                  )}
-                  <label className="text-xs font-semibold block">
-                    Level aktivitas harian
-                    <select
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      value={form.activity_level}
-                      onChange={(e) => setForm((f) => ({ ...f, activity_level: e.target.value }))}
-                    >
-                      <option value="low">Rendah (kerja mostly duduk)</option>
-                      <option value="moderate">Sedang</option>
-                      <option value="high">Tinggi</option>
-                      <option value="very_high">Sangat tinggi</option>
-                    </select>
-                  </label>
-                </section>
+                </>
+              )}
 
-                <section className="rounded-2xl bg-white border border-slate-100 p-4 space-y-3 shadow-sm">
-                  <h3 className="font-bold text-sm">Preferensi</h3>
-                  <label className="text-xs font-semibold block">
-                    Olahraga favorit
-                    <textarea
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm min-h-[72px]"
-                      placeholder="Mis. jalan cepat, renang, gym"
-                      value={form.exercise_preferences}
-                      onChange={(e) => setForm((f) => ({ ...f, exercise_preferences: e.target.value }))}
-                    />
-                  </label>
-                  <label className="text-xs font-semibold block">
-                    Pantangan makanan
-                    <textarea
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm min-h-[72px]"
-                      placeholder="Mis. seafood, kacang, susu"
-                      value={form.food_restrictions}
-                      onChange={(e) => setForm((f) => ({ ...f, food_restrictions: e.target.value }))}
-                    />
-                  </label>
-                </section>
+              {/* Form input */}
+              {planStep === "form" && (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setPlanStep("pick")}
+                    className="inline-flex items-center gap-1 text-[13px] font-semibold text-primary"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                    Ganti tipe goal
+                  </button>
 
-                <button
-                  type="button"
-                  disabled={saving || !apiOk}
-                  onClick={handleGeneratePlan}
-                  className="w-full h-14 rounded-full bg-gradient-to-br from-primary-container to-primary text-white font-bold text-lg shadow-[0_8px_24px_rgba(0,106,63,0.3)] disabled:opacity-50"
-                >
-                  {saving ? "Menyimpan…" : "Generate My Plan"}
-                </button>
-              </div>
-            )}
-
-            {planStep === "summary" && summary && (
-              <div className="space-y-4 pb-8">
-                <h2 className="text-xl font-extrabold">Ringkasan rencana</h2>
-                <div className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm space-y-2">
-                  <p className="font-bold text-lg">{summary.goal.goal_name}</p>
-                  <p className="text-sm text-on-surface-variant">
-                    {summary.goal.start_date} → {summary.goal.target_date}
-                  </p>
-                  <p className="text-sm">
-                    Berat {summary.goal.start_weight_kg} kg → target {summary.goal.target_weight_kg} kg
-                  </p>
-                  {summary.sample_daily_target && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-sm">
-                      <div className="rounded-xl bg-emerald-50/50 p-3">
-                        <p className="text-[10px] font-bold text-emerald-800 uppercase">Kalori/hari</p>
-                        <p className="font-black text-lg text-emerald-900">
-                          {Math.round(summary.sample_daily_target.calorie_target)}
-                        </p>
+                  {([
+                    { icon: "person", title: "Data fisik & profil", sub: "Untuk perhitungan BMR/TDEE", content: (
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="col-span-2 text-[11px] font-semibold text-slate-600">Gender
+                          <select className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.gender} onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}>
+                            <option value="">Pilih</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                          </select>
+                        </label>
+                        <label className="text-[11px] font-semibold text-slate-600">Tinggi (cm)
+                          <input type="number" className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.height_cm} onChange={(e) => setForm((f) => ({ ...f, height_cm: e.target.value }))} />
+                        </label>
+                        <label className="text-[11px] font-semibold text-slate-600">Berat profil (kg)
+                          <input type="number" className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.weight_kg} onChange={(e) => setForm((f) => ({ ...f, weight_kg: e.target.value }))} />
+                        </label>
+                        <label className="col-span-2 text-[11px] font-semibold text-slate-600">Usia (opsional)
+                          <input type="number" className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" placeholder="Jika tidak ada di data karyawan" value={form.age_years} onChange={(e) => setForm((f) => ({ ...f, age_years: e.target.value }))} />
+                        </label>
                       </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <p className="text-[10px] font-bold uppercase text-slate-600">Protein</p>
-                        <p className="font-bold">{Math.round(summary.sample_daily_target.protein_target_g)} g</p>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <p className="text-[10px] font-bold uppercase text-slate-600">Karbo</p>
-                        <p className="font-bold">{Math.round(summary.sample_daily_target.carb_target_g)} g</p>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <p className="text-[10px] font-bold uppercase text-slate-600">Lemak</p>
-                        <p className="font-bold">{Math.round(summary.sample_daily_target.fat_target_g)} g</p>
-                      </div>
-                      <div className="col-span-2 rounded-xl bg-slate-50 p-3 flex justify-between text-sm">
-                        <span className="text-on-surface-variant">Latihan (menit/hari)</span>
-                        <span className="font-bold">{summary.sample_daily_target.exercise_duration_target_min} min</span>
-                      </div>
-                      <div className="col-span-2 rounded-xl bg-slate-50 p-3 flex justify-between text-sm">
-                        <span className="text-on-surface-variant">Target langkah</span>
-                        <span className="font-bold">{summary.sample_daily_target.step_target}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {summary.milestones?.length > 0 && (
-                  <div className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm">
-                    <p className="font-bold text-sm mb-2">Milestone mingguan</p>
-                    <ul className="space-y-2 text-sm">
-                      {summary.milestones.slice(0, 6).map((m) => (
-                        <li key={m.milestone_date} className="flex justify-between border-b border-slate-50 pb-2">
-                          <span className="text-on-surface-variant">{m.milestone_date}</span>
-                          <span className="font-semibold">~{m.expected_weight_kg} kg</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={handleActivate}
-                  className="w-full h-14 rounded-full bg-primary text-white font-bold shadow-lg disabled:opacity-50"
-                >
-                  Aktifkan Goal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlanStep("form");
-                  }}
-                  className="w-full h-12 rounded-full border border-slate-200 font-semibold text-sm"
-                >
-                  Ubah form
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {!loading && tab === "daily" && (
-          <div className="space-y-4 pb-8">
-            {!activeGoal && (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-                <span className="material-symbols-outlined text-4xl text-slate-400">flag</span>
-                <p className="mt-2 font-bold text-on-surface">Belum ada goal aktif</p>
-                <p className="text-sm text-on-surface-variant mt-1">Buat rencana di tab Rencana lalu aktifkan.</p>
-                <button
-                  type="button"
-                  onClick={() => setTab("plan")}
-                  className="mt-4 px-6 py-3 rounded-full bg-primary text-white text-sm font-bold"
-                >
-                  Ke Rencana
-                </button>
-              </div>
-            )}
-
-            {activeGoal && !dashboard && (
-              <div className="flex justify-center py-12">
-                <div className="size-9 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin" />
-              </div>
-            )}
-
-            {activeGoal && dashboard && (
-              <>
-                <div className="rounded-2xl bg-gradient-to-br from-primary-container to-primary text-white p-5 shadow-lg">
-                  <p className="text-xs font-bold uppercase opacity-80">Health score hari ini</p>
-                  <div className="flex items-end gap-2 mt-2">
-                    <span className="text-5xl font-black">
-                      {dashboard.score ? Math.round(dashboard.score.total_score) : "—"}
-                    </span>
-                    <span className="text-lg opacity-80 mb-1">/100</span>
-                  </div>
-                  {dashboard.score && (
-                    <span
-                      className={`inline-block mt-3 text-xs font-bold px-3 py-1 rounded-full ${categoryLabel(dashboard.score.category).cls}`}
-                    >
-                      {categoryLabel(dashboard.score.category).text}
-                    </span>
-                  )}
-                </div>
-
-                {dashboard.daily_target && (
-                  <>
-                    <div className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm space-y-3">
-                      <h3 className="font-bold text-sm">Kalori</h3>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-on-surface-variant">Aktual</span>
-                        <span className="font-bold">{Math.round(dashboard.actuals?.calorie || 0)} kcal</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-on-surface-variant">Target</span>
-                        <span className="font-bold">{Math.round(dashboard.daily_target.calorie_target)} kcal</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              (dashboard.daily_target.calorie_target > 0
-                                ? ((dashboard.actuals?.calorie || 0) / dashboard.daily_target.calorie_target) * 100
-                                : 0)
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      <p className="text-xs text-on-surface-variant">
-                        Sisa kalori:{" "}
-                        <span className="font-bold text-on-surface">
-                          {Math.round(
-                            Math.max(0, dashboard.daily_target.calorie_target - (dashboard.actuals?.calorie || 0))
-                          )}{" "}
-                          kcal
-                        </span>
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm">
-                      <h3 className="font-bold text-sm mb-2">Protein & olahraga</h3>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <p className="text-on-surface-variant text-xs">Protein aktual</p>
-                          <p className="font-bold">{Math.round(dashboard.actuals?.protein_g || 0)} g</p>
-                          <p className="text-xs text-on-surface-variant mt-1">
-                            Target {Math.round(dashboard.daily_target.protein_target_g)} g
-                          </p>
-                          <p className="text-xs font-semibold text-primary mt-1">
-                            Gap:{" "}
-                            {Math.round(dashboard.daily_target.protein_target_g - (dashboard.actuals?.protein_g || 0))}{" "}
-                            g
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-on-surface-variant text-xs">Olahraga</p>
-                          <p className="font-bold">{dashboard.actuals?.exercise_min || 0} min</p>
-                          <p className="text-xs text-on-surface-variant mt-1">
-                            Target {dashboard.daily_target.exercise_duration_target_min} min
-                          </p>
-                          <p className="text-xs font-semibold text-primary mt-1">
-                            Gap:{" "}
-                            {Math.max(
-                              0,
-                              dashboard.daily_target.exercise_duration_target_min -
-                                (dashboard.actuals?.exercise_min || 0)
-                            )}{" "}
-                            min
-                          </p>
+                    )},
+                    { icon: "flag", title: "Target goal", sub: "", content: (
+                      <div className="space-y-2">
+                        <label className="block text-[11px] font-semibold text-slate-600">Nama goal (opsional)
+                          <input className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.goal_name} onChange={(e) => setForm((f) => ({ ...f, goal_name: e.target.value }))} />
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="text-[11px] font-semibold text-slate-600">Mulai
+                            <input type="date" className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-2 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} />
+                          </label>
+                          <label className="text-[11px] font-semibold text-slate-600">Selesai
+                            <input type="date" className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-2 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.target_date} onChange={(e) => setForm((f) => ({ ...f, target_date: e.target.value }))} />
+                          </label>
+                          <label className="text-[11px] font-semibold text-slate-600">Berat awal (kg)
+                            <input type="number" className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.start_weight_kg} onChange={(e) => setForm((f) => ({ ...f, start_weight_kg: e.target.value }))} />
+                          </label>
+                          <label className="text-[11px] font-semibold text-slate-600">Target berat (kg)
+                            <input type="number" className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.target_weight_kg} onChange={(e) => setForm((f) => ({ ...f, target_weight_kg: e.target.value }))} />
+                          </label>
                         </div>
                       </div>
-                      <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between text-sm">
-                        <span className="text-on-surface-variant">Langkah (target)</span>
-                        <span className="font-bold">{dashboard.daily_target.step_target}</span>
+                    )},
+                    { icon: "bolt", title: "Intensitas & aktivitas", sub: "", content: (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          {["easy","normal","aggressive"].map((i) => (
+                            <button key={i} type="button" onClick={() => setForm((f) => ({ ...f, intensity_level: i }))}
+                              className={`rounded-full px-4 py-2 text-[12px] font-bold capitalize transition-colors ${
+                                form.intensity_level === i ? "bg-primary text-white" : "bg-slate-100 text-slate-600"
+                              }`}>{i}</button>
+                          ))}
+                        </div>
+                        {aggressiveWarn && (
+                          <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                            Intensitas agresif menyesuaikan defisit/surplus lebih kuat. Pastikan Anda sehat cukup.
+                          </p>
+                        )}
+                        <label className="block text-[11px] font-semibold text-slate-600">Level aktivitas harian
+                          <select className="mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" value={form.activity_level} onChange={(e) => setForm((f) => ({ ...f, activity_level: e.target.value }))}>
+                            <option value="low">Rendah (kerja mostly duduk)</option>
+                            <option value="moderate">Sedang</option>
+                            <option value="high">Tinggi</option>
+                            <option value="very_high">Sangat tinggi</option>
+                          </select>
+                        </label>
                       </div>
-                      <p className="text-[11px] text-on-surface-variant mt-1">
-                        Aktual langkah memerlukan integrasi perangkat; fokus ke log olahraga dari foto.
-                      </p>
+                    )},
+                    { icon: "tune", title: "Preferensi", sub: "", content: (
+                      <div className="space-y-2">
+                        <label className="block text-[11px] font-semibold text-slate-600">Olahraga favorit
+                          <textarea className="mt-1 min-h-[72px] w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" placeholder="Mis. jalan cepat, renang, gym" value={form.exercise_preferences} onChange={(e) => setForm((f) => ({ ...f, exercise_preferences: e.target.value }))} />
+                        </label>
+                        <label className="block text-[11px] font-semibold text-slate-600">Pantangan makanan
+                          <textarea className="mt-1 min-h-[72px] w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200" placeholder="Mis. seafood, kacang, susu" value={form.food_restrictions} onChange={(e) => setForm((f) => ({ ...f, food_restrictions: e.target.value }))} />
+                        </label>
+                      </div>
+                    )},
+                  ] ).map((sec) => (
+                    <div key={sec.title} className="rounded-2xl bg-white shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+                      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
+                        <div className="flex size-8 items-center justify-center rounded-full bg-primary text-white">
+                          <span className="material-symbols-outlined text-[16px]">{sec.icon}</span>
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-bold text-slate-900">{sec.title}</p>
+                          {sec.sub && <p className="text-[11px] text-slate-500">{sec.sub}</p>}
+                        </div>
+                      </div>
+                      <div className="p-4">{sec.content}</div>
                     </div>
-                  </>
-                )}
+                  ))}
 
-                {!dashboard.daily_target && (
-                  <p className="text-sm text-on-surface-variant">
-                    Tanggal hari ini di luar rentang goal atau target harian belum tersedia.
-                  </p>
-                )}
-
-                <div className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm">
-                  <h3 className="font-bold text-sm mb-2">Rekomendasi hari ini</h3>
-                  {!dashboard.recommendations?.length && (
-                    <p className="text-sm text-on-surface-variant">Tidak ada rekomendasi baru. Pertahankan!</p>
-                  )}
-                  <ul className="space-y-3">
-                    {dashboard.recommendations?.map((r) => (
-                      <li key={r.id} className="rounded-xl bg-emerald-50/40 border border-emerald-100/50 p-3">
-                        <p className="text-[10px] font-bold uppercase text-emerald-800">{r.category}</p>
-                        <p className="font-bold text-sm mt-0.5">{r.title}</p>
-                        <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">{r.body}</p>
-                      </li>
-                    ))}
-                  </ul>
+                  <button
+                    type="button"
+                    disabled={saving || !apiOk}
+                    onClick={handleGeneratePlan}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-[15px] font-bold text-white shadow-xl shadow-primary/30 disabled:opacity-50 active:scale-[0.99]"
+                  >
+                    <span className="material-symbols-outlined text-[22px]">auto_awesome</span>
+                    {saving ? "Menyimpanâ€¦" : "Generate My Plan"}
+                  </button>
                 </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={() => loadDashboard()}
-                  className="w-full h-12 rounded-xl border border-slate-200 font-semibold text-sm"
-                >
-                  Muat ulang hari ini
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {!loading && tab === "progress" && (
-          <div className="space-y-4 pb-8">
-            {!activeGoal && (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-on-surface-variant">
-                Aktifkan goal untuk melihat progres.
-              </div>
-            )}
-
-            {activeGoal && progress && (
-              <>
-                <div className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm flex justify-between items-center">
-                  <div>
-                    <p className="text-xs font-bold text-on-surface-variant uppercase">Penyelesaian perkiraan</p>
-                    <p className="text-3xl font-black text-primary mt-1">{progress.completion_percent}%</p>
-                  </div>
-                  <div className="h-16 w-16 rounded-full border-4 border-emerald-100 flex items-center justify-center">
-                    <span className="material-symbols-outlined text-emerald-600 text-3xl">timeline</span>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm">
-                  <h3 className="font-bold text-sm mb-3">Health score (7 hari terakhir)</h3>
-                  {lastScores.length === 0 ? (
-                    <p className="text-sm text-on-surface-variant">Belum ada data skor. Buka tab Hari ini untuk menghitung.</p>
-                  ) : (
-                    <div className="flex items-end gap-1 h-28">
-                      {lastScores.map((s) => {
-                        const h = (Number(s.total_score) / maxScore) * 100;
-                        return (
-                          <div key={s.date} className="flex-1 flex flex-col items-center gap-1">
-                            <div className="w-full bg-slate-100 rounded-t-lg overflow-hidden flex flex-col justify-end h-20">
-                              <div
-                                className="bg-primary w-full rounded-t-lg transition-all min-h-[4px]"
-                                style={{ height: `${h}%` }}
-                              />
-                            </div>
-                            <span className="text-[9px] text-on-surface-variant truncate w-full text-center">
-                              {s.date?.slice(5)}
-                            </span>
+              {/* Summary */}
+              {planStep === "summary" && summary && (
+                <div className="space-y-3 pb-6">
+                  <p className="px-0.5 text-[17px] font-bold text-slate-900">Ringkasan rencana</p>
+                  <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+                    <div className="bg-primary px-4 py-4 text-white">
+                      <p className="text-[16px] font-extrabold leading-tight">{summary.goal.goal_name}</p>
+                      <p className="mt-1 text-[12px] text-white/75">{summary.goal.start_date} â†’ {summary.goal.target_date}</p>
+                      <p className="mt-1.5 text-[13px] font-semibold text-white/90">{summary.goal.start_weight_kg} kg â†’ {summary.goal.target_weight_kg} kg</p>
+                    </div>
+                    {summary.sample_daily_target && (
+                      <div className="grid grid-cols-2 gap-2 p-3">
+                        {[
+                          { label: "Kalori/hari", val: `${Math.round(summary.sample_daily_target.calorie_target)} kcal`, accent: true },
+                          { label: "Protein", val: `${Math.round(summary.sample_daily_target.protein_target_g)} g` },
+                          { label: "Karbo", val: `${Math.round(summary.sample_daily_target.carb_target_g)} g` },
+                          { label: "Lemak", val: `${Math.round(summary.sample_daily_target.fat_target_g)} g` },
+                        ].map((item) => (
+                          <div key={item.label} className={`rounded-xl p-3 ${ item.accent ? "bg-primary/10" : "bg-slate-50" }`}>
+                            <p className={`text-[10px] font-bold uppercase ${ item.accent ? "text-primary" : "text-slate-600" }`}>{item.label}</p>
+                            <p className={`mt-1 font-black ${ item.accent ? "text-primary" : "text-slate-900" }`}>{item.val}</p>
                           </div>
-                        );
-                      })}
+                        ))}
+                        <div className="col-span-2 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-[13px]">
+                          <span className="text-slate-500">Latihan / hari</span>
+                          <span className="font-bold">{summary.sample_daily_target.exercise_duration_target_min} min</span>
+                        </div>
+                        <div className="col-span-2 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-[13px]">
+                          <span className="text-slate-500">Target langkah</span>
+                          <span className="font-bold">{summary.sample_daily_target.step_target}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {summary.milestones?.length > 0 && (
+                    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+                      <p className="mb-2 text-[14px] font-bold text-slate-900">Milestone mingguan</p>
+                      <ul className="space-y-2 text-[13px]">
+                        {summary.milestones.slice(0, 6).map((m) => (
+                          <li key={m.milestone_date} className="flex justify-between border-b border-slate-50 pb-2 last:border-0">
+                            <span className="text-slate-500">{m.milestone_date}</span>
+                            <span className="font-semibold text-slate-900">~{m.expected_weight_kg} kg</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
+                  <button type="button" disabled={saving} onClick={handleActivate}
+                    className="w-full rounded-2xl bg-primary py-3.5 text-[15px] font-bold text-white shadow-xl shadow-primary/30 disabled:opacity-50">
+                    Aktifkan Goal
+                  </button>
+                  <button type="button" onClick={() => setPlanStep("form")}
+                    className="w-full rounded-2xl border border-slate-200 bg-white py-3 text-[13px] font-semibold text-slate-700">
+                    Ubah form
+                  </button>
                 </div>
+              )}
+            </div>
+          )}
 
-                <div className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm">
-                  <h3 className="font-bold text-sm mb-2">Milestone</h3>
-                  {!progress.milestones?.length && (
-                    <p className="text-xs text-on-surface-variant">Tidak ada milestone (rentang terlalu pendek).</p>
-                  )}
-                  <ul className="space-y-2 text-sm">
-                    {progress.milestones?.map((m) => (
-                      <li key={m.milestone_date} className="flex justify-between">
-                        <span>{m.milestone_date}</span>
-                        <span className="font-semibold">~{m.expected_weight_kg} kg</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
+          {/* TAB: HARI INI */}
+          {!loading && tab === "daily" && (
+            <GoalDailyPanel
+              activeGoal={activeGoal}
+              dashboard={dashboard}
+              loading={dashboardLoading}
+              onGoPlan={() => setTab("plan")}
+              onRefresh={() => loadDashboard()}
+            />
+          )}
+
+          {/* TAB: PROGRES */}
+          {!loading && tab === "progress" && (
+            <GoalProgressPanel
+              activeGoal={activeGoal}
+              progress={progress}
+              loading={progressLoading}
+              onGoPlan={() => setTab("plan")}
+            />
+          )}
+
+        </div>
+      </div>
+    </CommunityShell>
   );
 }

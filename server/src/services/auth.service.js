@@ -1,6 +1,6 @@
-import { UnauthorizedError } from "../domain/errors/AppError.js";
+import { UnauthorizedError, ValidationError } from "../domain/errors/AppError.js";
 import * as employeeRepo from "../repositories/employeeProfile.repository.js";
-import { verifyPasswordForSid } from "../utils/password.js";
+import { hashPassword, verifyPassword, verifyPasswordForSid } from "../utils/password.js";
 import { signAccessToken } from "../utils/jwt.js";
 import { sidToEmail } from "../utils/sidEmail.js";
 import { toSessionUserDto } from "./session.mapper.js";
@@ -58,4 +58,50 @@ export async function loadSessionUser(userId) {
   }
 
   return sessionUser;
+}
+
+/**
+ * Ganti password akun login (verifikasi password lama dengan bcrypt ketat).
+ * @param {string} userId
+ * @param {{ currentPassword: string, newPassword: string }} body
+ */
+export async function changePassword(userId, body) {
+  const currentPassword = String(body?.currentPassword ?? "");
+  const newPassword = String(body?.newPassword ?? "");
+
+  if (!currentPassword || !newPassword) {
+    throw new ValidationError("Isi password lama dan password baru.");
+  }
+  if (newPassword.length < 6) {
+    throw new ValidationError("Password baru minimal 6 karakter.");
+  }
+  if (newPassword.length > 128) {
+    throw new ValidationError("Password baru terlalu panjang.");
+  }
+  if (currentPassword === newPassword) {
+    throw new ValidationError("Password baru harus berbeda dari password lama.");
+  }
+
+  const employee = await employeeRepo.findEmployeeWithCredentialsById(userId);
+  if (!employee) {
+    throw new UnauthorizedError("Sesi tidak valid.");
+  }
+
+  const hash = String(employee.password_hash || "").trim();
+  if (!hash) {
+    throw new ValidationError("Akun belum punya password. Hubungi admin.");
+  }
+
+  const ok = await verifyPassword(currentPassword, hash);
+  if (!ok) {
+    throw new ValidationError("Password lama salah.");
+  }
+
+  const nextHash = await hashPassword(newPassword);
+  const updated = await employeeRepo.updatePasswordHashById(employee.id, nextHash);
+  if (!updated) {
+    throw new ValidationError("Gagal menyimpan password baru.");
+  }
+
+  return { ok: true, message: "Password berhasil diubah." };
 }

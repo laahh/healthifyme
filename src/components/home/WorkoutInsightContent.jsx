@@ -1,18 +1,39 @@
 import { Link, useLocation } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
-import { getSessionUser } from "../../auth/auth";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getSessionUser, logout } from "../../auth/auth";
 import { apiRequest, isApiBackendEnabled } from "../../lib/apiClient";
+import {
+  fetchStravaStatus,
+  formatDistanceKm,
+  formatHr,
+  formatPace,
+  formatSpeedKmh,
+  sportIcon,
+} from "../../lib/stravaApi";
+import {
+  LOOKBACK_DAYS,
+  addDaysYmd,
+  formatInsightDateLabel,
+  localTodayYmd,
+  resolveWorkoutStoryFromDaily,
+  DEFAULT_DURATION_TARGET_MIN,
+  defaultWorkoutTargets,
+} from "../../lib/workoutStoryFallback";
+import WorkoutHealthStatusCard from "../workout/WorkoutHealthStatusCard";
+import WorkoutDayAnalysisCharts from "../workout/WorkoutDayAnalysisCharts";
+import { showToast } from "../../lib/appAlert";
 
-function localTodayYmd() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function formatSessionTime(value) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
 }
-
-const FALLBACK_AVATAR =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuCNeGKVRJgIPImTURVGAslzSS3ZGPZ1xwjwxmvnBO6MgCf_BcNjV1Jb4dQVUUhe2eezIrwoSJlx8y4bf3tE4mzYZ7Ob5GUGFekJ8dYQKoLn6pO04wFbneUeuijPEKJvnZIoJGeL-M2ktUWVwsSZJVp0p6H9hEYTuSXFd30ToMP9i6HpnGMb3hPgU95cjKY1BqdQXKMKQz7xSUcpPh5dxD-VMYhec9PJLins0xpetqOgFxP2RK1LxYvs18mJOZUQXWm9j8hAZlhXO0Q";
 
 export default function WorkoutInsightContent() {
   const location = useLocation();
@@ -20,49 +41,80 @@ export default function WorkoutInsightContent() {
   const isNavActive = (path) => currentPath === path;
   const navItemClass = (path) =>
     `flex flex-col items-center gap-1 ${isNavActive(path) ? "text-primary" : "text-slate-400"}`;
-  const navLabelClass = (path) => `text-[10px] ${isNavActive(path) ? "font-bold" : "font-medium"}`;
-  const sessionUser = getSessionUser();
-  const greetingName = sessionUser?.name?.trim().split(/\s+/)[0] || "Pengguna";
-  const avatarPhoto = sessionUser?.photo || FALLBACK_AVATAR;
+  const navLabelClass = (path) =>
+    `text-[10px] ${isNavActive(path) ? "font-bold" : "font-medium"}`;
 
-  const [exercises, setExercises] = useState([]);
-  const [exercisesLoading, setExercisesLoading] = useState(() => isApiBackendEnabled());
-  const [exercisesError, setExercisesError] = useState("");
+  const sessionUser = getSessionUser();
+  const myUserId = sessionUser?.id != null ? String(sessionUser.id) : "";
+
+  const todayYmd = localTodayYmd();
+  const minYmd = addDaysYmd(todayYmd, -LOOKBACK_DAYS);
+  const [selectedDate, setSelectedDate] = useState(todayYmd);
+  const dateInputRef = useRef(null);
+
   const [weeklySummary, setWeeklySummary] = useState(null);
   const [weeklyLoading, setWeeklyLoading] = useState(() => isApiBackendEnabled());
   const [weeklyError, setWeeklyError] = useState("");
+  const [dailySummary, setDailySummary] = useState(null);
+  const [dailyLoading, setDailyLoading] = useState(() => isApiBackendEnabled());
+  const [dailyError, setDailyError] = useState("");
+  const [stravaStatus, setStravaStatus] = useState(null);
+  const [stravaLoading, setStravaLoading] = useState(() => isApiBackendEnabled());
+  const [verifiedUserId, setVerifiedUserId] = useState("");
 
-  useEffect(() => {
-    if (!isApiBackendEnabled()) {
-      setExercisesLoading(false);
-      setExercisesError("Hubungkan app ke API (VITE_API_URL) dan pastikan tabel latihan sudah dimigrasi.");
+  const isToday = selectedDate === todayYmd;
+  const canGoNext = selectedDate < todayYmd;
+  const canGoPrev = selectedDate > minYmd;
+  const dateLabel = formatInsightDateLabel(selectedDate, todayYmd);
+
+  const goPrev = () => {
+    if (!canGoPrev) {
+      showToast("Maksimal 90 hari ke belakang", "info");
       return;
     }
+    setSelectedDate((d) => addDaysYmd(d, -1));
+  };
+  const goNext = () => {
+    if (!canGoNext) return;
+    setSelectedDate((d) => addDaysYmd(d, 1));
+  };
+
+  useEffect(() => {
+    if (!isApiBackendEnabled() || !myUserId) return;
     let cancelled = false;
     (async () => {
       try {
-        const data = await apiRequest("/exercises?limit=12&offset=0");
+        const data = await apiRequest("/auth/me");
         if (cancelled) return;
-        setExercises(Array.isArray(data?.exercises) ? data.exercises : []);
-        setExercisesError("");
-      } catch (e) {
-        if (!cancelled) {
-          setExercisesError(e instanceof Error ? e.message : "Gagal memuat latihan.");
+        const apiUserId = data?.user?.id != null ? String(data.user.id) : "";
+        if (!apiUserId || apiUserId !== myUserId) {
+          logout();
+          window.location.replace("/login");
+          return;
         }
-      } finally {
-        if (!cancelled) setExercisesLoading(false);
+        setVerifiedUserId(apiUserId);
+      } catch (e) {
+        if (cancelled) return;
+        const message = e instanceof Error ? e.message : "Gagal memverifikasi sesi.";
+        setWeeklyLoading(false);
+        setDailyLoading(false);
+        setStravaLoading(false);
+        setWeeklyError(message);
+        setDailyError(message);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [myUserId]);
 
   useEffect(() => {
-    if (!isApiBackendEnabled()) {
-      setWeeklyLoading(false);
-      setWeeklyError("");
-      setWeeklySummary(null);
+    if (!isApiBackendEnabled() || !verifiedUserId) {
+      if (!isApiBackendEnabled()) {
+        setWeeklyLoading(false);
+        setWeeklySummary(null);
+        setWeeklyError("");
+      }
       return;
     }
     let cancelled = false;
@@ -70,11 +122,10 @@ export default function WorkoutInsightContent() {
       setWeeklyLoading(true);
       setWeeklyError("");
       try {
-        const date = localTodayYmd();
-        const data = await apiRequest(`/me/workouts/weekly-summary?date=${encodeURIComponent(date)}`);
-        if (!cancelled) {
-          setWeeklySummary(data);
-        }
+        const data = await apiRequest(
+          `/me/workouts/weekly-summary?date=${encodeURIComponent(selectedDate)}`
+        );
+        if (!cancelled) setWeeklySummary(data);
       } catch (e) {
         if (!cancelled) {
           setWeeklySummary(null);
@@ -87,381 +138,631 @@ export default function WorkoutInsightContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedDate, verifiedUserId]);
 
-  const chartPoints = useMemo(() => {
-    const days = weeklySummary?.days;
-    if (!Array.isArray(days) || days.length !== 7) return [];
-    const maxDur = Math.max(1, ...days.map((d) => Number(d.duration_min) || 0));
+  useEffect(() => {
+    if (!isApiBackendEnabled() || !verifiedUserId) {
+      if (!isApiBackendEnabled()) {
+        setDailyLoading(false);
+        setDailySummary(null);
+        setDailyError("");
+      }
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setDailyLoading(true);
+      setDailyError("");
+      try {
+        const data = await apiRequest(
+          `/me/workouts/daily-summary?date=${encodeURIComponent(selectedDate)}`
+        );
+        if (!cancelled) setDailySummary(data);
+      } catch (e) {
+        if (!cancelled) {
+          setDailySummary(null);
+          setDailyError(e instanceof Error ? e.message : "Gagal memuat data olahraga.");
+        }
+      } finally {
+        if (!cancelled) setDailyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, verifiedUserId]);
+
+  useEffect(() => {
+    if (!isApiBackendEnabled() || !verifiedUserId) {
+      if (!isApiBackendEnabled()) {
+        setStravaLoading(false);
+        setStravaStatus(null);
+      }
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setStravaLoading(true);
+      try {
+        const status = await fetchStravaStatus();
+        if (!cancelled) setStravaStatus(status);
+      } catch {
+        if (!cancelled) setStravaStatus(null);
+      } finally {
+        if (!cancelled) setStravaLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [verifiedUserId]);
+
+  const story = useMemo(
+    () => resolveWorkoutStoryFromDaily(dailySummary, { isToday }),
+    [dailySummary, isToday]
+  );
+
+  const targets = story?.targets || dailySummary?.targets || defaultWorkoutTargets();
+
+  const durationTarget =
+    Number(weeklySummary?.daily_target_duration_min) > 0
+      ? Number(weeklySummary.daily_target_duration_min)
+      : Number(targets.duration_min) || DEFAULT_DURATION_TARGET_MIN;
+
+  const weeklySessionsTarget =
+    Number(weeklySummary?.weekly_target_sessions) > 0
+      ? Number(weeklySummary.weekly_target_sessions)
+      : Number(targets.sessions_per_week) || 3;
+
+  const dayTotals = dailySummary?.totals || {
+    duration_min: 0,
+    calories_kcal: 0,
+    sessions: 0,
+    strava_sessions: 0,
+    manual_sessions: 0,
+    distance_m: 0,
+    avg_heart_rate: null,
+    max_heart_rate: null,
+  };
+
+  const durationProgressPct = Math.max(
+    0,
+    Math.round((Number(dayTotals.duration_min) || 0) / Math.max(1, durationTarget) * 100)
+  );
+
+  const weeklyChartPoints = useMemo(() => {
+    const days = Array.isArray(weeklySummary?.days) ? weeklySummary.days : [];
+    const n = days.length || 7;
+    const padX = 18;
+    const width = 310;
+    const top = 18;
+    const bottom = 92;
+    const chartH = bottom - top;
+    const maxDur = Math.max(
+      1,
+      ...days.map((d) => Number(d.duration_min) || 0),
+      durationTarget
+    );
     return days.map((d, i) => {
       const dur = Number(d.duration_min) || 0;
-      const x = (i / 6) * 310;
-      const y = 76 - (dur / maxDur) * 48;
-      const yClamped = Math.max(28, Math.min(76, y));
+      const x = n <= 1 ? width / 2 : padX + (i / (n - 1)) * (width - padX * 2);
+      const y = bottom - (dur / maxDur) * chartH;
       return {
         ...d,
+        duration_min: dur,
         x,
-        y: dur === 0 ? 76 : yClamped,
+        y,
+        underTarget: dur > 0 && dur < durationTarget,
+        isSelected: d.date === selectedDate,
+        maxDur,
       };
     });
-  }, [weeklySummary]);
+  }, [weeklySummary, durationTarget, selectedDate]);
 
-  const performancePath = useMemo(() => chartPoints.map((p) => `${p.x},${p.y}`).join(" "), [chartPoints]);
-
-  const highlightPoint = useMemo(() => {
-    if (!chartPoints.length) return null;
-    const today = localTodayYmd();
-    const onToday = chartPoints.find((p) => p.date === today);
-    if (onToday) return onToday;
-    let best = chartPoints[0];
-    for (const p of chartPoints) {
-      if ((p.duration_min || 0) > (best.duration_min || 0)) best = p;
+  const weeklyTrendPaths = useMemo(() => {
+    if (!weeklyChartPoints.length) {
+      return { line: "", area: "", targetY: 92 };
     }
-    return best;
-  }, [chartPoints]);
+    const maxDur = weeklyChartPoints[0]?.maxDur || durationTarget || 1;
+    const top = 18;
+    const bottom = 92;
+    const chartH = bottom - top;
+    const targetY = bottom - (durationTarget / maxDur) * chartH;
+    const line = weeklyChartPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+    const first = weeklyChartPoints[0];
+    const last = weeklyChartPoints[weeklyChartPoints.length - 1];
+    const area = `${line} L ${last.x} ${bottom} L ${first.x} ${bottom} Z`;
+    return { line, area, targetY };
+  }, [weeklyChartPoints, durationTarget]);
 
-  const weekRangeLabel = weeklySummary
-    ? `${weeklySummary.week_start} – ${weeklySummary.week_end}`
-    : "";
-  const totalKcal = weeklySummary?.totals?.calories_kcal ?? 0;
-  const avgBpm = weeklySummary?.avg_heart_rate_week;
-  const avgMinDay = weeklySummary?.avg_minutes_per_day ?? 0;
-
-  const todayWorkout = useMemo(() => {
-    const today = localTodayYmd();
-    return weeklySummary?.days?.find((d) => d.date === today) ?? null;
-  }, [weeklySummary]);
-
-  const todayMinutes = Math.round(Number(todayWorkout?.duration_min) || 0);
-  const todayHasActivity = todayMinutes > 0 || (Number(todayWorkout?.calories_kcal) || 0) > 0;
-
-  const todayDetailItems = useMemo(() => {
-    const weekSess = weeklySummary?.totals?.sessions ?? 0;
-    const kcal = Math.round(Number(todayWorkout?.calories_kcal) || 0);
-    const maxHr = todayWorkout?.max_heart_rate;
-    const avgHr = todayWorkout?.avg_heart_rate;
-    return [
-      {
-        label: "Total Kalori",
-        value: kcal,
-        pct: Math.min(100, Math.round((kcal / 600) * 100)),
-        color: "bg-blue-500",
-      },
-      {
-        label: "Maks Denyut Nadi",
-        value: maxHr != null ? maxHr : "—",
-        pct: maxHr != null ? Math.min(100, Math.round((maxHr / 200) * 100)) : 0,
-        color: "bg-violet-500",
-      },
-      {
-        label: "Freq dalam minggu",
-        value: weekSess,
-        pct: Math.min(100, Math.round((weekSess / 10) * 100)),
-        color: "bg-amber-500",
-      },
-      {
-        label: "Rata-rata Denyut Nadi",
-        value: avgHr != null ? avgHr : "—",
-        pct: avgHr != null ? Math.min(100, Math.round((avgHr / 200) * 100)) : 0,
-        color: "bg-emerald-500",
-      },
-    ];
-  }, [weeklySummary, todayWorkout]);
+  const sessionItems = Array.isArray(dailySummary?.items) ? dailySummary.items : [];
+  const weekSessions = Number(weeklySummary?.totals?.sessions) || 0;
+  const stravaConnected = Boolean(stravaStatus?.connected);
+  const stravaConfigured = Boolean(stravaStatus?.configured);
 
   return (
     <div className="font-['Public_Sans'] bg-background-light text-slate-900 min-h-screen dark:bg-background-dark dark:text-slate-100">
       <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden max-w-md mx-auto">
         <div className="flex items-center bg-white dark:bg-slate-900 p-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 justify-between">
           <Link to="/home" className="flex size-12 shrink-0 items-center justify-center cursor-pointer">
-            <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">arrow_back</span>
+            <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">
+              arrow_back
+            </span>
           </Link>
-          <h2 className="text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Workout Insight</h2>
+          <h2 className="text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">
+            Workout Insight
+          </h2>
           <div className="flex w-12 items-center justify-end">
-            <button className="flex items-center justify-center rounded-xl h-10 w-10 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-              <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">share</span>
+            <Link
+              to="/mcu"
+              className="flex items-center justify-center rounded-xl h-10 w-10 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              aria-label="MCU"
+            >
+              <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">
+                medical_information
+              </span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Date navigator */}
+        <div className="px-4 pt-3 pb-1">
+          <div className="flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-white px-2 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <button
+              type="button"
+              onClick={goPrev}
+              disabled={!canGoPrev}
+              className="flex size-10 items-center justify-center rounded-full text-slate-700 hover:bg-slate-50 disabled:opacity-30"
+              aria-label="Hari sebelumnya"
+            >
+              <span className="material-symbols-outlined">chevron_left</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.click()}
+              className="min-w-0 flex-1 text-center"
+            >
+              <p className="truncate text-[15px] font-bold text-slate-900 dark:text-slate-100">
+                {dateLabel}
+              </p>
+              <p className="text-[10px] font-medium text-slate-400">{selectedDate}</p>
+            </button>
+            <input
+              ref={dateInputRef}
+              type="date"
+              className="sr-only"
+              min={minYmd}
+              max={todayYmd}
+              value={selectedDate}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                if (v < minYmd) {
+                  showToast("Maksimal 90 hari ke belakang", "info");
+                  setSelectedDate(minYmd);
+                  return;
+                }
+                if (v > todayYmd) {
+                  setSelectedDate(todayYmd);
+                  return;
+                }
+                setSelectedDate(v);
+              }}
+            />
+            <button
+              type="button"
+              onClick={goNext}
+              disabled={!canGoNext}
+              className="flex size-10 items-center justify-center rounded-full text-slate-700 hover:bg-slate-50 disabled:opacity-30"
+              aria-label="Hari berikutnya"
+            >
+              <span className="material-symbols-outlined">chevron_right</span>
             </button>
           </div>
         </div>
 
-        <div className="flex p-6">
-          <div className="flex w-full flex-col gap-6 items-center">
-            <div className="flex gap-4 flex-col items-center">
-              <div className="relative">
-                <div className="aspect-square rounded-full min-h-32 w-32 border-4 border-primary shadow-lg overflow-hidden bg-slate-100">
-                  <img src={avatarPhoto} alt="" className="h-full w-full object-cover" />
-                </div>
-                <div className="absolute -bottom-2 -right-2 bg-primary text-white rounded-full p-2 border-2 border-white">
-                  <span className="material-symbols-outlined text-sm">emoji_events</span>
-                </div>
-              </div>
-              <div className="flex flex-col items-center justify-center">
-                <p className="text-[24px] font-bold leading-tight tracking-tight text-center">Keren, {greetingName}!</p>
-                <p className="text-slate-600 dark:text-slate-400 text-base font-normal leading-normal text-center mt-1">
-                  {weeklyLoading
-                    ? "Memuat data minggu ini…"
-                    : weeklySummary?.totals?.sessions
-                      ? `${weeklySummary.totals.sessions} sesi olahraga tercatat minggu ini (Senin–Minggu).`
-                      : "Belum ada sesi olahraga di minggu ini. Upload hasil latihan untuk melihat ringkasan."}
-                </p>
-                <div className="flex flex-wrap gap-3 mt-3 items-center justify-center">
-                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1 tabular-nums">
-                    <span className="material-symbols-outlined text-base">local_fire_department</span>
-                    {weeklyLoading ? "…" : `${Math.round(Number(totalKcal) || 0)} kkal`}
-                  </span>
-                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1 tabular-nums">
-                    <span className="material-symbols-outlined text-base">favorite</span>
-                    {weeklyLoading ? "…" : avgBpm != null ? `${avgBpm} avg BPM` : "BPM —"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="px-4 py-3">
+          {dailyLoading && isApiBackendEnabled() ? (
+            <div className="h-40 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />
+          ) : (
+            <WorkoutHealthStatusCard story={story} dateLabel={dateLabel} />
+          )}
+          {dailyError ? (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{dailyError}</p>
+          ) : null}
         </div>
 
+        {/* Day duration ring */}
         <div className="px-4 py-2">
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-lg font-bold leading-tight tracking-[-0.015em]">Olahragamu</h3>
-            <span className="text-primary text-sm font-semibold cursor-pointer">View All</span>
-          </div>
           <div className="rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold">Ringkasan Olahraga Mingguan</h3>
-              {/* <span className="text-[10px] text-slate-400 font-medium tabular-nums">{weekRangeLabel}</span> */}
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                Durasi · {dateLabel}
+              </h3>
+              <span className="text-[10px] font-semibold text-slate-400">
+                Target {durationTarget} menit
+              </span>
             </div>
-            {weeklyError && (
-              <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">{weeklyError}</p>
-            )}
-            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
-              {weeklyLoading ? (
-                <div className="h-24 flex items-center justify-center text-sm text-slate-500">Memuat grafik…</div>
-              ) : !isApiBackendEnabled() ? (
-                <div className="h-24 flex items-center justify-center text-xs text-slate-500 text-center px-2">
-                  Set VITE_API_URL untuk ringkasan dari database.
-                </div>
-              ) : (
-                <>
-                  <svg viewBox="0 0 310 88" className="w-full h-24">
-                    <defs>
-                      <linearGradient id="workoutLine" x1="0%" x2="100%" y1="0%" y2="0%">
-                        <stop offset="0%" stopColor="#22c55e" />
-                        <stop offset="50%" stopColor="#0ea5e9" />
-                        <stop offset="100%" stopColor="#8b5cf6" />
-                      </linearGradient>
-                    </defs>
-                    <polyline fill="none" stroke="#e5e7eb" strokeWidth="1.5" points="0,76 310,76" />
-                    {chartPoints.length > 0 && (
-                      <polyline
-                        fill="none"
-                        stroke="url(#workoutLine)"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        points={performancePath}
-                      />
-                    )}
-                    {highlightPoint && (
-                      <circle cx={highlightPoint.x} cy={highlightPoint.y} r="4.5" fill="#111827" className="dark:fill-white" />
-                    )}
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/50 p-4">
+              <div className="flex items-center gap-3">
+                <div className="relative size-[72px] shrink-0">
+                  <svg className="size-full -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-slate-200 dark:text-slate-600"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeDasharray="100, 100"
+                      strokeWidth="3"
+                    />
+                    <path
+                      className={
+                        durationProgressPct >= 100 ? "text-emerald-500" : "text-primary"
+                      }
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeDasharray={`${Math.min(durationProgressPct, 100)}, 100`}
+                      strokeLinecap="round"
+                      strokeWidth="3"
+                    />
                   </svg>
-                  <div className="grid grid-cols-7 text-[10px] text-slate-400 mt-1 gap-0.5">
-                    {chartPoints.map((point) => (
-                      <span key={point.date} className="text-center truncate" title={`${point.date}: ${point.duration_min} menit`}>
-                        {point.label}
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-2xl font-bold leading-none tabular-nums">
-                  {weeklyLoading ? "…" : avgMinDay}
-                </p>
-                <p className="text-[11px] text-slate-500 mt-1">Menit/hari (rata-rata, 7 hari)</p>
-              </div>
-              <Link
-                to="/activity/capture"
-                className="h-9 px-4 rounded-full bg-black text-white text-sm font-semibold inline-flex items-center justify-center dark:bg-white dark:text-black"
-              >
-                Goal
-              </Link>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-2">
-              Sumber: workout_analyses • Minggu Senin–Minggu (WIB sesuai server)
-            </p>
-          </div>
-        </div>
-
-        <div className="px-4 py-2">
-          <div className="rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-sm border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold">Ringkasan Olahraga Hari ini</h3>
-              <span className="text-[10px] text-slate-400 font-medium tabular-nums">{localTodayYmd()}</span>
-            </div>
-            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`size-11 rounded-full border-2 flex items-center justify-center ${
-                      todayHasActivity ? "border-emerald-200 text-emerald-500" : "border-slate-200 text-slate-400"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined">
-                      {todayHasActivity ? "check" : "fitness_center"}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-primary text-[26px]">
+                      exercise
                     </span>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold tabular-nums">
-                      {weeklyLoading ? "…" : `${todayMinutes} Menit`}
-                    </p>
-                    <p className="text-[11px] text-slate-500">Hari ini (workout_analyses)</p>
-                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="size-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"
-                    aria-label="Notifikasi"
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xl font-black tabular-nums text-slate-900 dark:text-slate-100">
+                    {Math.round((Number(dayTotals.duration_min) || 0) * 10) / 10}
+                    <span className="text-sm font-semibold text-slate-400"> mnt</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    {Number(dayTotals.sessions) || 0} sesi ·{" "}
+                    {Math.round(Number(dayTotals.calories_kcal) || 0)} kkal
+                    {Number(dayTotals.distance_m) > 0
+                      ? ` · ${formatDistanceKm(dayTotals.distance_m)}`
+                      : ""}
+                    {dayTotals.avg_heart_rate != null
+                      ? ` · HR ${formatHr(dayTotals.avg_heart_rate)}`
+                      : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Weekly trend */}
+        <div className="px-4 py-2">
+          <div className="mb-3 flex items-center justify-between px-1">
+            <div>
+              <h3 className="text-lg font-bold leading-tight tracking-[-0.015em]">
+                Tren durasi minggu
+              </h3>
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                Ketuk titik untuk lihat hari tersebut
+              </p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold tabular-nums text-slate-600">
+              Target {durationTarget} mnt
+            </span>
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            {weeklyError && (
+              <p className="mb-2 text-xs text-amber-700 dark:text-amber-300">{weeklyError}</p>
+            )}
+            {weeklyLoading ? (
+              <div className="flex h-40 items-center justify-center text-sm text-slate-500">
+                Memuat grafik…
+              </div>
+            ) : !isApiBackendEnabled() ? (
+              <div className="flex h-40 items-center justify-center px-2 text-center text-xs text-slate-500">
+                Set VITE_API_URL untuk ringkasan olahraga dari database.
+              </div>
+            ) : (
+              <>
+                <div className="rounded-xl bg-gradient-to-b from-slate-50 to-white px-1 pt-2 dark:from-slate-800/40 dark:to-slate-900">
+                  <svg
+                    viewBox="0 0 310 110"
+                    className="w-full"
+                    role="img"
+                    aria-label="Tren durasi mingguan"
                   >
-                    <span className="material-symbols-outlined text-[16px]">notifications</span>
-                  </button>
+                    <defs>
+                      <linearGradient id="workoutTrendFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+                      </linearGradient>
+                      <linearGradient id="workoutTrendStroke" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#059669" />
+                        <stop offset="100%" stopColor="#006a3f" />
+                      </linearGradient>
+                    </defs>
+                    <line x1="12" y1="92" x2="298" y2="92" stroke="#e2e8f0" strokeWidth="1.5" />
+                    <line
+                      x1="12"
+                      y1={weeklyTrendPaths.targetY}
+                      x2="268"
+                      y2={weeklyTrendPaths.targetY}
+                      stroke="#006a3f"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                      opacity="0.55"
+                    />
+                    <rect
+                      x="270"
+                      y={weeklyTrendPaths.targetY - 8}
+                      width="36"
+                      height="14"
+                      rx="4"
+                      fill="#ecfdf5"
+                      stroke="#a7f3d0"
+                    />
+                    <text
+                      x="288"
+                      y={weeklyTrendPaths.targetY + 2}
+                      textAnchor="middle"
+                      className="fill-[#006a3f]"
+                      style={{ fontSize: 8, fontWeight: 700 }}
+                    >
+                      {durationTarget}m
+                    </text>
+                    {weeklyTrendPaths.area ? (
+                      <path d={weeklyTrendPaths.area} fill="url(#workoutTrendFill)" />
+                    ) : null}
+                    {weeklyTrendPaths.line ? (
+                      <path
+                        d={weeklyTrendPaths.line}
+                        fill="none"
+                        stroke="url(#workoutTrendStroke)"
+                        strokeWidth="2.5"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                    ) : null}
+                    {weeklyChartPoints.map((p) => (
+                      <g key={p.date || p.index}>
+                        <circle
+                          cx={p.x}
+                          cy={p.y}
+                          r={p.isSelected ? 7 : 5}
+                          fill={p.isSelected ? "#006a3f" : "#fff"}
+                          stroke={p.isSelected ? "#006a3f" : "#10b981"}
+                          strokeWidth="2"
+                          className="cursor-pointer"
+                          onClick={() => {
+                            if (p.date) setSelectedDate(p.date);
+                          }}
+                        />
+                        <text
+                          x={p.x}
+                          y="106"
+                          textAnchor="middle"
+                          className={p.isSelected ? "fill-primary" : "fill-slate-400"}
+                          style={{ fontSize: 9, fontWeight: p.isSelected ? 700 : 500 }}
+                        >
+                          {(p.label || "").slice(0, 3)}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>
+                    Rata {Number(weeklySummary?.avg_minutes_per_day) || 0} mnt/hari
+                    {weeklySummary?.avg_heart_rate_week != null
+                      ? ` · HR ${formatHr(weeklySummary.avg_heart_rate_week)}`
+                      : ""}
+                  </span>
+                  <span className="shrink-0 tabular-nums">
+                    {weekSessions}/{weeklySessionsTarget} sesi minggu
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Charts */}
+        <div className="px-4 py-2">
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            {dailyLoading ? (
+              <div className="h-48 animate-pulse rounded-xl bg-slate-100" />
+            ) : (
+              <WorkoutDayAnalysisCharts
+                totals={dayTotals}
+                targets={{ duration_min: durationTarget }}
+                story={story}
+                dateLabel={dateLabel}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Session list */}
+        <div className="px-4 py-2">
+          <div className="mb-3 flex items-center justify-between px-1">
+            <h3 className="text-lg font-bold leading-tight tracking-[-0.015em]">
+              Sesi · {dateLabel}
+            </h3>
+            <Link
+              to="/workout/manual"
+              className="text-[11px] font-bold text-primary"
+            >
+              + Log
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {dailyLoading ? (
+              <div className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+            ) : sessionItems.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-sm font-semibold text-slate-600">Belum ada sesi</p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Catat olahraga atau sync Strava untuk tanggal ini.
+                </p>
+                <div className="mt-3 flex justify-center gap-2">
+                  <Link
+                    to="/workout/manual"
+                    className="rounded-full bg-primary px-3 py-1.5 text-[11px] font-bold text-white"
+                  >
+                    Log olahraga
+                  </Link>
                   <Link
                     to="/activity/capture"
-                    className="size-7 rounded-full bg-emerald-600 text-white flex items-center justify-center"
-                    aria-label="Tambah goal"
+                    className="rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600"
                   >
-                    <span className="material-symbols-outlined text-[16px]">add</span>
+                    Scan
                   </Link>
                 </div>
               </div>
-              {!isApiBackendEnabled() ? (
-                <p className="mt-3 text-[10px] text-slate-500">Set VITE_API_URL untuk data harian dari database.</p>
-              ) : weeklyError ? (
-                <p className="mt-3 text-[10px] text-amber-600 dark:text-amber-400">{weeklyError}</p>
-              ) : (
-                <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold">
-                  {todayDetailItems.map((item) => (
-                    <div key={item.label}>
-                      <div className="flex justify-between mb-1 gap-1">
-                        <span className="leading-tight">
-                          {item.label}: {item.value}
-                        </span>
-                      </div>
-                      <div className="h-1 rounded-full bg-slate-200 overflow-hidden">
-                        <div className={`${item.color} h-full`} style={{ width: `${Math.min(item.pct, 100)}%` }} />
-                      </div>
+            ) : (
+              sessionItems.map((it) => {
+                const href = it.href || null;
+                const isStrava = it.source === "strava";
+                const distM = Number(it.distance_m) || 0;
+                const movingS = Math.round((Number(it.duration_min) || 0) * 60);
+                const metaBits = [
+                  isStrava ? "Strava" : "Manual",
+                  formatSessionTime(it.start_at) || null,
+                  Number(it.duration_min) > 0
+                    ? `${Math.round(Number(it.duration_min) * 10) / 10} mnt`
+                    : null,
+                  Number(it.calories_kcal) > 0
+                    ? `${Math.round(Number(it.calories_kcal))} kkal`
+                    : null,
+                ].filter(Boolean);
+                const richBits = [
+                  distM > 0 ? formatDistanceKm(distM) : null,
+                  it.avg_heart_rate != null ? formatHr(it.avg_heart_rate) : null,
+                  isStrava && distM > 50 && movingS > 0
+                    ? formatPace(distM, movingS)
+                    : null,
+                  isStrava && it.average_speed != null
+                    ? formatSpeedKmh(it.average_speed)
+                    : null,
+                  isStrava && it.total_elevation_gain != null
+                    ? `↑${Math.round(Number(it.total_elevation_gain))} m`
+                    : null,
+                ].filter(Boolean);
+                const inner = (
+                  <>
+                    <div
+                      className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${
+                        isStrava
+                          ? "bg-orange-50 text-[#fc4c02]"
+                          : "bg-primary/10 text-primary"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[22px]">
+                        {isStrava
+                          ? sportIcon(it.sport_type || it.name)
+                          : "fitness_center"}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-4 py-2">
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-lg font-bold leading-tight tracking-[-0.015em]">Pelatihan otot</h3>
-            <Link to="/workout/exercises" className="text-primary text-sm font-semibold">
-              Lihat semua
-            </Link>
-          </div>
-          {exercisesLoading && (
-            <p className="text-sm text-slate-500 px-1 py-2">Memuat daftar latihan…</p>
-          )}
-          {!exercisesLoading && exercisesError && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-              {exercisesError}
-            </div>
-          )}
-          {!exercisesLoading && !exercisesError && exercises.length === 0 && (
-            <p className="text-sm text-slate-500 px-1">Belum ada data latihan di database.</p>
-          )}
-          {!exercisesLoading && !exercisesError && exercises.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {exercises.map((ex) => (
-                <Link
-                  key={ex.id}
-                  to={`/workout/exercise/${ex.id}`}
-                  className="flex gap-3 rounded-xl border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 active:opacity-95"
-                >
-                  <div className="min-w-0 flex-1 flex flex-col gap-2">
-                    <p className="text-slate-900 dark:text-slate-100 text-sm font-bold leading-snug">{ex.name}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {(ex.targetMuscles || []).slice(0, 3).map((m) => (
-                        <span
-                          key={`${ex.id}-tm-${m.id}`}
-                          className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
-                        >
-                          {m.name}
-                        </span>
-                      ))}
-                      {(ex.bodyParts || []).slice(0, 2).map((p) => (
-                        <span
-                          key={`${ex.id}-bp-${p.id}`}
-                          className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                        >
-                          {p.name}
-                        </span>
-                      ))}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {it.name || "Olahraga"}
+                      </p>
+                      <p className="text-[11px] text-slate-500">{metaBits.join(" · ")}</p>
+                      {richBits.length > 0 ? (
+                        <p className="mt-0.5 text-[11px] text-slate-400">{richBits.join(" · ")}</p>
+                      ) : null}
                     </div>
-                    <span className="text-primary text-xs font-semibold inline-flex items-center gap-0.5 w-fit">
-                      Detail & langkah
-                      <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                    </span>
+                    <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+                  </>
+                );
+                return href ? (
+                  <Link
+                    key={`${it.source}-${it.id}`}
+                    to={href}
+                    className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <div
+                    key={`${it.source}-${it.id}`}
+                    className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    {inner}
                   </div>
-                  {ex.gifUrl ? (
-                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-100 dark:border-slate-700">
-                      <img src={ex.gifUrl} alt="" className="h-full w-full object-cover" />
-                    </div>
-                  ) : (
-                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <span className="material-symbols-outlined text-2xl">fitness_center</span>
-                    </div>
-                  )}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="px-4 py-4">
-          <h3 className="text-lg font-bold leading-tight tracking-[-0.015em] mb-3 px-1">Rekomendasi</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
-              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                <span className="material-symbols-outlined text-blue-600">water_drop</span>
-              </div>
-              <p className="font-bold text-sm">Hydration</p>
-              <p className="text-xs text-slate-500">Minum 500ml air + elektrolit setelah sesi intensitas tinggi.</p>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
-              <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <span className="material-symbols-outlined text-green-600">self_improvement</span>
-              </div>
-              <p className="font-bold text-sm">Stretching</p>
-              <p className="text-xs text-slate-500">10 menit lower-body stretching untuk mencegah pegal berlebih.</p>
-            </div>
+                );
+              })
+            )}
           </div>
         </div>
 
+        {/* Strava strip */}
         <div className="px-4 py-2 mb-24">
-          {/* <h3 className="text-lg font-bold leading-tight tracking-[-0.015em] mb-3 px-1">Next Session Suggestion</h3> */}
-          <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-center gap-4">
-            <div className="bg-primary rounded-xl p-3 text-white">
-              <span className="material-symbols-outlined">directions_walk</span>
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800">Strava</h3>
+              <Link to="/strava" className="text-[11px] font-bold text-[#fc4c02]">
+                Hub
+              </Link>
             </div>
-            <div className="flex-1">
-              <p className="font-bold text-slate-900 dark:text-slate-100">Jalan Santai</p>
-              <p className="text-sm text-slate-600 dark:text-slate-400">Jalan santai 20 menit untuk menjaga mobilitas sendi.</p>
-            </div>
-            <button className="bg-white dark:bg-slate-800 p-2 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm">
-              <span className="material-symbols-outlined text-primary">add</span>
-            </button>
+            {stravaLoading ? (
+              <div className="h-12 animate-pulse rounded-xl bg-slate-100" />
+            ) : !stravaConfigured ? (
+              <p className="text-[12px] text-slate-500">
+                Integrasi Strava belum dikonfigurasi di server.
+              </p>
+            ) : !stravaConnected ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[12px] text-slate-600">
+                  Hubungkan Strava agar aktivitas otomatis masuk insight.
+                </p>
+                <Link
+                  to="/strava"
+                  className="shrink-0 rounded-full bg-[#fc4c02] px-3 py-1.5 text-[11px] font-bold text-white"
+                >
+                  Connect
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+                <div className="rounded-xl bg-orange-50/80 px-2 py-2">
+                  <p className="text-lg font-black tabular-nums text-slate-900">
+                    {Number(dayTotals.strava_sessions) || 0}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Sesi Strava</p>
+                </div>
+                <div className="rounded-xl bg-orange-50/80 px-2 py-2">
+                  <p className="text-lg font-black tabular-nums text-slate-900">
+                    {formatDistanceKm(dayTotals.distance_m || 0)}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Jarak hari</p>
+                </div>
+                <div className="rounded-xl bg-orange-50/80 px-2 py-2">
+                  <p className="text-lg font-black tabular-nums text-slate-900">
+                    {dayTotals.avg_heart_rate != null
+                      ? Math.round(Number(dayTotals.avg_heart_rate))
+                      : "—"}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Avg HR</p>
+                </div>
+                <div className="rounded-xl bg-orange-50/80 px-2 py-2">
+                  <p className="text-lg font-black tabular-nums text-slate-900">
+                    {dayTotals.max_heart_rate != null
+                      ? Math.round(Number(dayTotals.max_heart_rate))
+                      : "—"}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Max HR</p>
+                </div>
+              </div>
+            )}
+            {stravaConnected ? (
+              <p className="mt-2 text-[10px] text-slate-400">
+                Metrik hari · {dateLabel.toLowerCase()} (manual + Strava). HR dari sesi yang punya data.
+              </p>
+            ) : null}
           </div>
         </div>
 
-        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-100 px-6 py-3 flex justify-between items-center z-20">
+        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-100 px-6 py-3 flex justify-between items-center z-20 dark:bg-slate-900 dark:border-slate-800">
           <Link to="/home" className={navItemClass("/home")}>
             <span
               className="material-symbols-outlined"
@@ -481,7 +782,10 @@ export default function WorkoutInsightContent() {
             <span className={navLabelClass("/nutrition/insight")}>Makanan</span>
           </Link>
           <div className="relative -top-8">
-            <Link to="/activity/capture" className="size-14 bg-primary rounded-full text-white shadow-xl shadow-primary/30 flex items-center justify-center">
+            <Link
+              to="/activity/capture"
+              className="size-14 bg-primary rounded-full text-white shadow-xl shadow-primary/30 flex items-center justify-center"
+            >
               <span className="material-symbols-outlined text-3xl">add</span>
             </Link>
           </div>

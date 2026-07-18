@@ -17,14 +17,18 @@
     "@capacitor/android": "^8.3.1",
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
+    "@mapbox/polyline": "^1.2.1",
     "@supabase/supabase-js": "^2.105.1",
     "csv-parse": "^6.2.1",
+    "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.30.1",
-    "sweetalert2": "^11.26.24"
+    "sweetalert2": "^11.26.25"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.21",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",

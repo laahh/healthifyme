@@ -28,6 +28,11 @@ export function normalizeFoodAnalysis(parsed) {
 
   const totalCalories = num(parsed.totalCalories ?? parsed.energyKkal ?? parsed.totalCal ?? parsed.calories);
 
+  const riskTagsRaw = parsed.riskTags ?? parsed.risk_tags;
+  const riskTags = Array.isArray(riskTagsRaw)
+    ? riskTagsRaw.map((t) => String(t).toLowerCase().trim()).filter(Boolean)
+    : [];
+
   return {
     foodName: String(parsed.foodName || "").trim() || "Makanan tidak diketahui",
     calories: totalCalories,
@@ -38,11 +43,13 @@ export function normalizeFoodAnalysis(parsed) {
     carbsG: numOrNull(parsed.carbsG ?? parsed.carbohydratesG ?? parsed.carbs ?? parsed.karbohidratG),
     fiberG: numOrNull(parsed.fiberG ?? parsed.fiber ?? parsed.seratG),
     waterMl: numOrNull(parsed.waterMl ?? parsed.airMl ?? parsed.air),
+    sugarG: numOrNull(parsed.sugarG ?? parsed.sugar_g ?? parsed.gulaG),
     vitA_RE: numOrNull(parsed.vitA_RE ?? parsed.vitA),
     vitD_mcg: numOrNull(parsed.vitD_mcg ?? parsed.vitD),
     vitE_mg: numOrNull(parsed.vitE_mg ?? parsed.vitE),
     vitK_mcg: numOrNull(parsed.vitK_mcg ?? parsed.vitK),
     vitC_mg: numOrNull(parsed.vitC_mg ?? parsed.vitC),
+    riskTags,
     nutritionNotes: String(parsed.nutritionNotes || "").trim(),
     foodItems,
   };

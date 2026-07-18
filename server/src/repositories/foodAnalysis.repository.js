@@ -65,6 +65,15 @@ export async function syncFoodAnalysisFromHistoryPayload(conn, userId, clientIte
 
   const p = payload;
   const foodName = String(p.foodName || "").trim().slice(0, 512);
+  const mealType = p.meal_type || p.mealType || null;
+  const sourceType = String(p.source_type || p.sourceType || "photo").slice(0, 16);
+  const barcode = p.barcode != null ? String(p.barcode).slice(0, 64) : null;
+  const servingLabel =
+    p.serving_label != null
+      ? String(p.serving_label).slice(0, 128)
+      : p.servingLabel != null
+        ? String(p.servingLabel).slice(0, 128)
+        : null;
   const nutritionNotes =
     p.nutritionNotes != null ? String(p.nutritionNotes) : null;
   const totalCalories = numOrNull(
@@ -93,6 +102,10 @@ export async function syncFoodAnalysisFromHistoryPayload(conn, userId, clientIte
     await conn.execute(
       `UPDATE food_analyses SET
         food_name = :foodName,
+        meal_type = :mealType,
+        source_type = :sourceType,
+        barcode = :barcode,
+        serving_label = :servingLabel,
         nutrition_notes = :nutritionNotes,
         total_calories = :totalCalories,
         protein_g = :proteinG,
@@ -110,6 +123,10 @@ export async function syncFoodAnalysisFromHistoryPayload(conn, userId, clientIte
        WHERE id = :analysisId`,
       {
         foodName,
+        mealType,
+        sourceType,
+        barcode,
+        servingLabel,
         nutritionNotes,
         totalCalories,
         proteinG,
@@ -133,12 +150,14 @@ export async function syncFoodAnalysisFromHistoryPayload(conn, userId, clientIte
   } else {
     const [ins] = await conn.execute(
       `INSERT INTO food_analyses (
-        user_id, client_item_id, food_name, nutrition_notes,
+        user_id, client_item_id, food_name, meal_type, source_type, barcode, serving_label,
+        nutrition_notes,
         total_calories, protein_g, fats_g, carbs_g, fiber_g, water_ml,
         vit_a_re, vit_d_mcg, vit_e_mg, vit_k_mcg, vit_c_mg,
         raw_ai_json
       ) VALUES (
-        :userId, :clientItemId, :foodName, :nutritionNotes,
+        :userId, :clientItemId, :foodName, :mealType, :sourceType, :barcode, :servingLabel,
+        :nutritionNotes,
         :totalCalories, :proteinG, :fatsG, :carbsG, :fiberG, :waterMl,
         :vitA_RE, :vitD_mcg, :vitE_mg, :vitK_mcg, :vitC_mg,
         CAST(:rawJson AS JSON)
@@ -147,6 +166,10 @@ export async function syncFoodAnalysisFromHistoryPayload(conn, userId, clientIte
         userId: uid,
         clientItemId: String(clientItemId),
         foodName,
+        mealType,
+        sourceType,
+        barcode,
+        servingLabel,
         nutritionNotes,
         totalCalories,
         proteinG,

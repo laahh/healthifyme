@@ -11,3 +11,8 @@ export const me = asyncHandler(async (req, res) => {
   const user = await authService.loadSessionUser(req.auth.userId);
   res.json({ user });
 });
+
+export const changePassword = asyncHandler(async (req, res) => {
+  const result = await authService.changePassword(req.auth.userId, req.body);
+  res.json(result);
+});

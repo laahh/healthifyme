@@ -3,6 +3,7 @@ import { getPool } from "../config/database.js";
 import * as goalRepo from "../repositories/goal.repository.js";
 import * as profileRepo from "../repositories/userProfile.repository.js";
 import * as employeeRepo from "../repositories/employeeProfile.repository.js";
+import * as stravaRepo from "../repositories/strava.repository.js";
 import { parseWorkoutTimeStringToMinutes } from "../utils/workoutDurationMinutes.js";
 import {
   computeBmr,
@@ -164,6 +165,24 @@ export async function createGoalDraft(userId, body) {
   }
   if (Math.abs(targetWeight - startWeight) > 80) {
     throw new ValidationError("Target berat badan terlalu ekstrem. Periksa kembali input.");
+  }
+
+  const hasPhysical =
+    body.gender != null || body.height_cm != null || body.weight_kg != null;
+  if (hasPhysical) {
+    const existing = await profileRepo.findProfileByUserId(userId);
+    await profileRepo.upsertProfile(userId, {
+      name: existing?.name ?? "",
+      phone: existing?.phone ?? "",
+      email: existing?.email ?? "",
+      address: existing?.address ?? null,
+      gender: body.gender != null ? String(body.gender) : undefined,
+      height_cm: body.height_cm != null ? Number(body.height_cm) : undefined,
+      weight_kg: body.weight_kg != null ? Number(body.weight_kg) : undefined,
+      activity_level: activityLevel,
+      exercise_preferences: exercisePreferences ?? undefined,
+      food_restrictions: foodRestrictions ?? undefined,
+    });
   }
 
   const { gender, height, weight: profileWeight, age: ageFromProfile } = await assertProfileReadyForGoal(userId);
@@ -334,17 +353,37 @@ export async function getGoalSummary(userId, goalId) {
 export async function getDashboard(userId, dateStr) {
   const active = await goalRepo.findActiveGoalByUserId(userId);
   if (!active) {
-    return { active_goal: null, date: dateStr, daily_target: null, actuals: null, score: null, recommendations: [] };
+    return {
+      user_id: String(userId),
+      active_goal: null,
+      date: dateStr,
+      daily_target: null,
+      actuals: null,
+      actuals_sources: { manual_workouts: 0, strava_sessions: 0 },
+      score: null,
+      recommendations: [],
+    };
   }
   const gid = String(active.id);
+  const uid = String(userId);
   const daily = await goalRepo.findDailyTarget(gid, dateStr);
   const food = await goalRepo.aggregateFoodForUserDate(userId, dateStr);
   const workouts = await goalRepo.listWorkoutsForUserDate(userId, dateStr);
+  const stravaRaw = await stravaRepo
+    .listActivitiesInDateRange(userId, dateStr, dateStr)
+    .catch(() => []);
+  const stravaActivities = (stravaRaw || []).filter((a) => String(a.user_id) === uid);
+
   let exerciseMin = 0;
   let burnKcal = 0;
   for (const w of workouts) {
     exerciseMin += parseWorkoutTimeStringToMinutes(w.workout_time);
     if (w.calories_kcal != null) burnKcal += Number(w.calories_kcal);
+  }
+  for (const a of stravaActivities) {
+    const seconds = Number(a.moving_time_s) || Number(a.elapsed_time_s) || 0;
+    exerciseMin += Math.round((seconds / 60) * 10) / 10;
+    if (a.calories != null) burnKcal += Number(a.calories);
   }
 
   const actuals = {
@@ -355,14 +394,20 @@ export async function getDashboard(userId, dateStr) {
     fiber_g: food ? Number(food.fiber_g) : 0,
     water_ml: food ? Number(food.water_ml) : 0,
     meal_count: food ? Number(food.meal_count) : 0,
-    exercise_min: exerciseMin,
-    workout_count: workouts.length,
-    burn_kcal_estimate: burnKcal,
+    exercise_min: Math.round(exerciseMin * 10) / 10,
+    workout_count: workouts.length + stravaActivities.length,
+    burn_kcal_estimate: Math.round(burnKcal),
+  };
+
+  const actualsSources = {
+    manual_workouts: workouts.length,
+    strava_sessions: stravaActivities.length,
   };
 
   const score = await computeAndPersistScore(userId, gid, dateStr, daily, actuals);
   const recs = await buildRecommendations(userId, gid, dateStr, daily, actuals, score);
   return {
+    user_id: uid,
     active_goal: mapUserGoalRow(active),
     date: dateStr,
     daily_target: daily
@@ -379,6 +424,7 @@ export async function getDashboard(userId, dateStr) {
         }
       : null,
     actuals,
+    actuals_sources: actualsSources,
     score,
     recommendations: recs,
   };
@@ -589,10 +635,207 @@ async function buildRecommendations(userId, userGoalId, dateStr, daily, actuals,
   }));
 }
 
+async function gatherDayActuals(userId, dateStr) {
+  const uid = String(userId);
+  const food = await goalRepo.aggregateFoodForUserDate(userId, dateStr);
+  const workouts = await goalRepo.listWorkoutsForUserDate(userId, dateStr);
+  const stravaRaw = await stravaRepo.listActivitiesInDateRange(userId, dateStr, dateStr).catch(() => []);
+  const stravaActivities = (stravaRaw || []).filter((a) => String(a.user_id) === uid);
+
+  let exerciseMin = 0;
+  for (const w of workouts) {
+    exerciseMin += parseWorkoutTimeStringToMinutes(w.workout_time);
+  }
+  for (const a of stravaActivities) {
+    const seconds = Number(a.moving_time_s) || Number(a.elapsed_time_s) || 0;
+    exerciseMin += Math.round((seconds / 60) * 10) / 10;
+  }
+
+  return {
+    calorie: food ? Number(food.calories) : 0,
+    protein_g: food ? Number(food.protein_g) : 0,
+    meal_count: food ? Number(food.meal_count) : 0,
+    exercise_min: Math.round(exerciseMin * 10) / 10,
+    workout_count: workouts.length + stravaActivities.length,
+  };
+}
+
+function foodAchievementStatus(actuals, daily) {
+  const mealCount = actuals.meal_count || 0;
+  if (mealCount === 0) return "no_log";
+  if (!daily) return "unknown";
+  const calT = Number(daily.calorie_target);
+  const cal = actuals.calorie;
+  if (cal > calT * 1.08) return "over";
+  if (cal < calT * 0.85) return "under";
+  return "on_target";
+}
+
+function exerciseAchievementStatus(actuals, daily) {
+  const min = actuals.exercise_min || 0;
+  if (min <= 0) return "none";
+  if (!daily) return "unknown";
+  const exT = Number(daily.exercise_duration_target_min);
+  if (min >= exT * 0.9) return "on_target";
+  if (min < exT * 0.45) return "under";
+  return "partial";
+}
+
+function foodAchievementText(status, actuals, daily) {
+  const cal = Math.round(actuals.calorie || 0);
+  const calT = daily ? Math.round(Number(daily.calorie_target)) : null;
+  const prot = Math.round(actuals.protein_g || 0);
+  const protT = daily ? Math.round(Number(daily.protein_target_g)) : null;
+  if (status === "no_log") return "Belum ada log makanan hari ini.";
+  if (status === "over") {
+    return `Asupan ${cal} kcal (target ~${calT} kcal) — sedikit di atas target. Protein ${prot} g.`;
+  }
+  if (status === "under") {
+    return `Asupan ${cal} kcal dari target ~${calT} kcal — masih kurang. Protein ${prot}${protT != null ? ` / target ${protT} g` : ""}.`;
+  }
+  if (status === "on_target") {
+    return `Nutrisi selaras: ~${cal} kcal, protein ${prot} g${protT != null ? ` (target ${protT} g)` : ""}.`;
+  }
+  return cal > 0 ? `Tercatat ${cal} kcal dari makanan.` : "Belum ada data makanan.";
+}
+
+function exerciseAchievementText(status, actuals, daily) {
+  const min = actuals.exercise_min || 0;
+  const exT = daily ? Number(daily.exercise_duration_target_min) : null;
+  if (status === "none") return "Belum ada aktivitas olahraga tercatat (manual atau Strava).";
+  if (status === "under") return `Olahraga ${min} menit — jauh di bawah target ${exT} menit.`;
+  if (status === "partial") {
+    return `Olahraga ${min} menit — mendekati target ${exT} menit, bisa ditambah sedikit.`;
+  }
+  if (status === "on_target") return `Olahraga ${min} menit — target harian (${exT} menit) tercapai.`;
+  return min > 0 ? `Aktivitas ${min} menit tercatat.` : "Belum olahraga.";
+}
+
+function dayOverallLine(foodStatus, exerciseStatus, storedScore) {
+  if (foodStatus === "no_log" && exerciseStatus === "none") {
+    return "Belum ada catatan makanan maupun olahraga — mulai log untuk melihat progres.";
+  }
+  const issues = [];
+  if (foodStatus === "no_log") issues.push("log makanan");
+  else if (foodStatus === "over") issues.push("porsi lebih ringan");
+  else if (foodStatus === "under") issues.push("asupan nutrisi");
+  if (exerciseStatus === "none") issues.push("aktivitas fisik");
+  else if (exerciseStatus === "under") issues.push("durasi olahraga");
+  if (issues.length === 0) {
+    if (storedScore?.category === "excellent" || storedScore?.category === "good") {
+      return "Hari yang solid — nutrisi dan gerak selaras dengan rencana.";
+    }
+    return "Pencapaian hari ini cukup selaras dengan target goal.";
+  }
+  return `Perlu perhatian: ${issues.join(", ")}.`;
+}
+
+function buildPeriodSummary(achievements) {
+  const slice = achievements.slice(0, 7);
+  if (slice.length === 0) {
+    return {
+      window_days: 0,
+      narrative: "Belum ada riwayat harian dalam periode ini.",
+      stats: {
+        food_logged_days: 0,
+        exercise_days: 0,
+        food_on_target_days: 0,
+        exercise_on_target_days: 0,
+        average_score: null,
+      },
+    };
+  }
+  const foodLogged = slice.filter((d) => (d.meal_count || 0) > 0).length;
+  const exerciseDays = slice.filter((d) => (d.exercise_actual_min || 0) > 0).length;
+  const foodOnTarget = slice.filter((d) => d.food_status === "on_target").length;
+  const exerciseOnTarget = slice.filter((d) => d.exercise_status === "on_target").length;
+  const withScore = slice.filter((d) => d.total_score != null);
+  const meanScore = withScore.length
+    ? Math.round(withScore.reduce((s, d) => s + Number(d.total_score), 0) / withScore.length)
+    : null;
+
+  let narrative = `Dalam ${slice.length} hari terakhir, makanan dicatat di ${foodLogged} hari`;
+  if (exerciseDays > 0) narrative += ` dan olahraga tercatat di ${exerciseDays} hari`;
+  narrative += ".";
+  if (foodOnTarget > 0) narrative += ` Kalori selaras target pada ${foodOnTarget} hari.`;
+  if (exerciseOnTarget > 0) narrative += ` Target olahraga tercapai ${exerciseOnTarget} hari.`;
+  if (meanScore != null) narrative += ` Rata-rata health score: ${meanScore}/100.`;
+  if (foodLogged < Math.ceil(slice.length / 2)) {
+    narrative += " Tingkatkan konsistensi log makanan agar ringkasan lebih akurat.";
+  }
+
+  return {
+    window_days: slice.length,
+    narrative,
+    stats: {
+      food_logged_days: foodLogged,
+      exercise_days: exerciseDays,
+      food_on_target_days: foodOnTarget,
+      exercise_on_target_days: exerciseOnTarget,
+      average_score: meanScore,
+    },
+  };
+}
+
+async function buildDailyAchievementsList(userId, userGoalId, goalStart, goalEnd, endDate, scoresRows) {
+  const achievementSpan = 14;
+  let achEnd = endDate;
+  if (achEnd > goalEnd) achEnd = goalEnd;
+  let achStart = addDays(achEnd, -(achievementSpan - 1));
+  if (achStart < goalStart) achStart = goalStart;
+  if (achStart > achEnd) return [];
+
+  const scoreByDate = new Map();
+  for (const s of scoresRows) {
+    scoreByDate.set(formatDateOnly(s.score_date), s);
+  }
+
+  const dates = eachDateInclusive(achStart, achEnd).reverse();
+  const list = [];
+  for (const dateStr of dates) {
+    const daily = await goalRepo.findDailyTarget(userGoalId, dateStr);
+    const actuals = await gatherDayActuals(userId, dateStr);
+    const stored = scoreByDate.get(dateStr);
+    const food_status = foodAchievementStatus(actuals, daily);
+    const exercise_status = exerciseAchievementStatus(actuals, daily);
+    list.push({
+      date: dateStr,
+      total_score: stored ? Number(stored.total_score) : null,
+      category: stored?.category || null,
+      calorie_actual: actuals.calorie,
+      calorie_target: daily ? Number(daily.calorie_target) : null,
+      protein_actual_g: actuals.protein_g,
+      protein_target_g: daily ? Number(daily.protein_target_g) : null,
+      exercise_actual_min: actuals.exercise_min,
+      exercise_target_min: daily ? Number(daily.exercise_duration_target_min) : null,
+      meal_count: actuals.meal_count,
+      workout_count: actuals.workout_count,
+      food_status,
+      exercise_status,
+      food_summary: foodAchievementText(food_status, actuals, daily),
+      exercise_summary: exerciseAchievementText(exercise_status, actuals, daily),
+      overall_summary: dayOverallLine(
+        food_status,
+        exercise_status,
+        stored ? { category: stored.category, total_score: Number(stored.total_score) } : null
+      ),
+    });
+  }
+  return list;
+}
+
 export async function getProgress(userId, days = 30) {
   const active = await goalRepo.findActiveGoalByUserId(userId);
   if (!active) {
-    return { active_goal: null, scores: [], milestones: [], completion_percent: 0 };
+    return {
+      user_id: String(userId),
+      active_goal: null,
+      scores: [],
+      milestones: [],
+      completion_percent: 0,
+      daily_achievements: [],
+      period_summary: null,
+    };
   }
   const end = new Date().toISOString().slice(0, 10);
   const start = addDays(end, -(days - 1));
@@ -603,7 +846,19 @@ export async function getProgress(userId, days = 30) {
   const total = Math.max(1, daysBetween(startD, targetD));
   const elapsed = Math.min(total, daysBetween(startD, end));
   const completion_percent = Math.round((elapsed / total) * 100);
+  const gid = String(active.id);
+  const daily_achievements = await buildDailyAchievementsList(
+    userId,
+    gid,
+    startD,
+    targetD,
+    end,
+    scores
+  );
+  const period_summary = buildPeriodSummary(daily_achievements);
+
   return {
+    user_id: String(userId),
     active_goal: mapUserGoalRow(active),
     scores: scores.map((s) => ({
       date: formatDateOnly(s.score_date),
@@ -619,5 +874,7 @@ export async function getProgress(userId, days = 30) {
       status: m.status,
     })),
     completion_percent,
+    daily_achievements,
+    period_summary,
   };
 }

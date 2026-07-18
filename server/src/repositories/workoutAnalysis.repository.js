@@ -200,13 +200,56 @@ export async function syncWorkoutAnalysisFromHistoryPayload(conn, userId, client
 export async function listWorkoutAnalysesInDateRange(userId, startDate, endDate) {
   const uid = parseBigIntId(userId);
   if (uid == null) return [];
+  const start = String(startDate || "").slice(0, 10);
+  const end = String(endDate || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return [];
   const pool = getPool();
   const [rows] = await pool.execute(
-    `SELECT DATE(created_at) AS d, workout_time, calories_kcal, avg_heart_rate, activity_type, created_at
+    `SELECT id, user_id, client_item_id, DATE(created_at) AS d, workout_time, calories_kcal,
+            avg_heart_rate, activity_type, distance, created_at
      FROM workout_analyses
      WHERE user_id = :uid AND DATE(created_at) >= :start AND DATE(created_at) <= :end
      ORDER BY created_at ASC`,
-    { uid, start: startDate, end: endDate }
+    { uid: Number(uid), start, end }
   );
-  return Array.isArray(rows) ? rows : [];
+  const mine = String(uid);
+  return (Array.isArray(rows) ? rows : []).filter((r) => String(r.user_id) === mine);
+}
+
+/**
+ * Recent workout logs for the current user (manual / photo / sync).
+ * @param {string} userId
+ * @param {number} [limit]
+ */
+export async function listRecentWorkouts(userId, limit = 20) {
+  const uid = parseBigIntId(userId);
+  if (uid == null) return [];
+  const lim = Math.min(50, Math.max(1, Number(limit) || 20));
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT id, user_id, client_item_id, activity_type, calories_kcal, workout_time, distance,
+            avg_heart_rate, summary_text, nutrition_notes_short, created_at
+     FROM workout_analyses
+     WHERE user_id = :uid
+     ORDER BY created_at DESC
+     LIMIT ${lim}`,
+    { uid: Number(uid) }
+  );
+  const mine = String(uid);
+  return (Array.isArray(rows) ? rows : [])
+    .filter((r) => String(r.user_id) === mine)
+    .map((r) => ({
+      id: String(r.id),
+      client_item_id: r.client_item_id != null ? String(r.client_item_id) : "",
+      activity_type: String(r.activity_type || "").trim() || "Workout",
+      calories: r.calories_kcal != null ? Number(r.calories_kcal) : 0,
+      workout_time: r.workout_time != null ? String(r.workout_time) : "",
+      distance: r.distance != null ? String(r.distance) : "",
+      avg_heart_rate: r.avg_heart_rate != null ? String(r.avg_heart_rate) : "",
+      notes:
+        (r.summary_text != null && String(r.summary_text).trim()) ||
+        (r.nutrition_notes_short != null && String(r.nutrition_notes_short).trim()) ||
+        "",
+      created_at: r.created_at,
+    }));
 }

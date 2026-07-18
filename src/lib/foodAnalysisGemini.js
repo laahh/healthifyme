@@ -10,11 +10,13 @@ Balas HANYA JSON valid (tanpa markdown), dengan struktur:
   "carbsG": 180,
   "fiberG": 23,
   "waterMl": 350,
+  "sugarG": 28,
   "vitA_RE": 400,
   "vitD_mcg": 2.5,
   "vitE_mg": 5,
   "vitK_mcg": 15,
   "vitC_mg": 30,
+  "riskTags": ["high_sugar"],
   "nutritionNotes": "1-2 kalimat saran konsumsi yang actionable dalam Bahasa Indonesia (contoh: kurangi gorengan/berminyak, tambah sayur, atur porsi, batasi santan/gula/garam sesuai konteks makanan)",
   "items": [
     { "name": "Nasi putih", "detail": "1 mangkuk • 200 kkal" },
@@ -25,6 +27,8 @@ Balas HANYA JSON valid (tanpa markdown), dengan struktur:
 Aturan:
 - totalCalories = estimasi TOTAL energi (kilokalori) seluruh makanan.
 - proteinG, fatsG, carbsG = gram; fiberG = gram; waterMl = mililiter air perkiraan dari makanan/minuman dalam gambar.
+- sugarG = estimasi gula bebas/tambahan (gram) untuk seluruh piring; null jika tidak bisa diperkirakan.
+- riskTags = array string dari subset: "high_sugar", "high_fat", "high_calorie", "high_sodium" (kosong [] jika tidak relevan).
 - vitA_RE = Retinol Ekuivalen (RE); vitD_mcg, vitK_mcg, vitC_mcg, vitE_mg sesuai satuan di kunci (perkirakan jika tidak ada data pasti).
 - Gunakan null untuk angka yang benar-benar tidak bisa diperkirakan (bukan 0 sembarangan).
 - nutritionNotes WAJIB berupa saran praktis konsumsi, bukan disclaimer umum.
@@ -60,6 +64,11 @@ export function normalizeFoodAnalysis(parsed) {
 
   const totalCalories = num(parsed.totalCalories ?? parsed.energyKkal ?? parsed.totalCal ?? parsed.calories);
 
+  const riskTagsRaw = parsed.riskTags ?? parsed.risk_tags;
+  const riskTags = Array.isArray(riskTagsRaw)
+    ? riskTagsRaw.map((t) => String(t).toLowerCase().trim()).filter(Boolean)
+    : [];
+
   return {
     foodName: String(parsed.foodName || "").trim() || "Makanan tidak diketahui",
     calories: totalCalories,
@@ -70,11 +79,13 @@ export function normalizeFoodAnalysis(parsed) {
     carbsG: numOrNull(parsed.carbsG ?? parsed.carbohydratesG ?? parsed.carbs ?? parsed.karbohidratG),
     fiberG: numOrNull(parsed.fiberG ?? parsed.fiber ?? parsed.seratG),
     waterMl: numOrNull(parsed.waterMl ?? parsed.airMl ?? parsed.air),
+    sugarG: numOrNull(parsed.sugarG ?? parsed.sugar_g ?? parsed.gulaG),
     vitA_RE: numOrNull(parsed.vitA_RE ?? parsed.vitA),
     vitD_mcg: numOrNull(parsed.vitD_mcg ?? parsed.vitD),
     vitE_mg: numOrNull(parsed.vitE_mg ?? parsed.vitE),
     vitK_mcg: numOrNull(parsed.vitK_mcg ?? parsed.vitK),
     vitC_mg: numOrNull(parsed.vitC_mg ?? parsed.vitC),
+    riskTags,
     nutritionNotes: String(parsed.nutritionNotes || "").trim(),
     foodItems,
   };

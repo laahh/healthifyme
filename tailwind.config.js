@@ -80,6 +80,46 @@ export default {
           "0%": { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        "splash-gradient-pan": {
+          "0%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+          "100%": { backgroundPosition: "0% 50%" },
+        },
+        "splash-blob-float-a": {
+          "0%, 100%": { transform: "translate(0, 0) rotate(45deg) scale(1)" },
+          "50%": { transform: "translate(-12px, 18px) rotate(52deg) scale(1.08)" },
+        },
+        "splash-blob-float-b": {
+          "0%, 100%": { transform: "translate(0, 0) scale(1)" },
+          "50%": { transform: "translate(14px, -16px) scale(1.12)" },
+        },
+        "splash-logo-in": {
+          "0%": { opacity: "0", transform: "scale(0.72) translateY(10px)" },
+          "60%": { opacity: "1", transform: "scale(1.05) translateY(0)" },
+          "100%": { opacity: "1", transform: "scale(1) translateY(0)" },
+        },
+        "splash-word-zoom": {
+          "0%": { opacity: "0", transform: "scale(0.35)" },
+          "70%": { opacity: "1", transform: "scale(1.06)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "splash-ring-pulse": {
+          "0%": { transform: "scale(0.85)", opacity: "0.55" },
+          "70%": { opacity: "0" },
+          "100%": { transform: "scale(1.6)", opacity: "0" },
+        },
+        "splash-fade-up": {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "splash-shimmer": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(250%)" },
+        },
+        "splash-fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
       },
       animation: {
         "exercise-hero-in":
@@ -88,6 +128,17 @@ export default {
           "exercise-sheet-in 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards",
         "exercise-row-in":
           "exercise-row-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "splash-gradient-pan": "splash-gradient-pan 8s ease-in-out infinite",
+        "splash-blob-float-a": "splash-blob-float-a 7s ease-in-out infinite",
+        "splash-blob-float-b": "splash-blob-float-b 9s ease-in-out infinite",
+        "splash-logo-in": "splash-logo-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both",
+        "splash-word-zoom": "splash-word-zoom 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both",
+        "splash-ring-pulse-1": "splash-ring-pulse 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite",
+        "splash-ring-pulse-2": "splash-ring-pulse 2.6s cubic-bezier(0.16, 1, 0.3, 1) 1.3s infinite",
+        "splash-fade-up": "splash-fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both",
+        "splash-fade-up-delay": "splash-fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.7s both",
+        "splash-shimmer": "splash-shimmer 1.8s ease-in-out infinite",
+        "splash-fade-in": "splash-fade-in 1s ease-out both",
       },
     },
   },
