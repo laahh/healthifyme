@@ -2,18 +2,18 @@ import { Link, useLocation } from "react-router-dom";
 
 /**
  * Bottom nav utama Well:
- * Beranda · Makanan · + · Sosial · Profil
+ * Beranda · Makanan · + · Olahraga · Profil
  */
 export default function AppBottomNav() {
   const { pathname } = useLocation();
 
   const isActive = (path) => {
     if (path === "/home") return pathname === "/home" || pathname === "/";
-    if (path === "/social") {
+    if (path === "/workout/insight") {
       return (
-        pathname === "/social" ||
-        pathname.startsWith("/community") ||
-        pathname.startsWith("/open-play")
+        pathname.startsWith("/workout") ||
+        pathname.startsWith("/strava") ||
+        pathname.startsWith("/activity")
       );
     }
     if (path === "/nutrition/insight") {
@@ -62,14 +62,14 @@ export default function AppBottomNav() {
         </Link>
       </div>
 
-      <Link to="/social" className={itemClass("/social")}>
+      <Link to="/workout/insight" className={itemClass("/workout/insight")}>
         <span
           className="material-symbols-outlined"
-          style={{ fontVariationSettings: `'FILL' ${isActive("/social") ? 1 : 0}` }}
+          style={{ fontVariationSettings: `'FILL' ${isActive("/workout/insight") ? 1 : 0}` }}
         >
-          groups
+          exercise
         </span>
-        <span className={labelClass("/social")}>Sosial</span>
+        <span className={labelClass("/workout/insight")}>Olahraga</span>
       </Link>
 
       <Link to="/profile" className={itemClass("/profile")}>
