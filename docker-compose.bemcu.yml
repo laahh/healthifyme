@@ -1,0 +1,33 @@
+# Override khusus deploy ke BeMCU Apps Server.
+# Tujuan: pakai database "bewell" di DB server BeMCU (10.11.48.135) yang sudah ada,
+# bukan container mysql sendiri (biar tidak duplikat resource, dan datanya terpusat
+# di server DB yang memang disediakan untuk ini).
+#
+# Pemakaian (JANGAN dipakai untuk dev lokal - itu tetap pakai docker-compose.yml biasa):
+#   docker compose -f docker-compose.yml -f docker-compose.bemcu.yml up -d --build
+#
+# Verifikasi hasil merge sebelum apply:
+#   docker compose -f docker-compose.yml -f docker-compose.bemcu.yml config
+
+services:
+  mysql:
+    # Matikan service mysql lokal - tidak dipakai saat deploy ke BeMCU.
+    profiles: ["local-only"]
+
+  api:
+    depends_on: []
+    environment:
+      MYSQL_HOST: 10.11.48.135
+      MYSQL_PORT: "3306"
+      MYSQL_USER: bewelluser
+      MYSQL_PASSWORD: ${BEMCU_DB_PASSWORD}
+      MYSQL_DATABASE: bewell
+      # DNS resmi sudah aktif (bewell.beraucoal.co.id -> ELB) - browser akses lewat domain ini,
+      # bukan localhost lagi, jadi CORS origin harus disesuaikan.
+      CORS_ORIGIN: https://bewell.beraucoal.co.id
+
+  web:
+    build:
+      args:
+        # DNS resmi sudah aktif - frontend manggil API lewat domain, bukan localhost/port tunnel.
+        VITE_API_URL: https://bewell-api.beraucoal.co.id

@@ -18,6 +18,8 @@ import { buildWeekUploadCells, summarizeWeekConsistency } from "../../utils/week
 import PopularCommunitiesSection from "../community/PopularCommunitiesSection";
 import { fetchTodayHealthAlerts, hasHealthAlerts } from "../../lib/healthAlertApi";
 import HealthAlertBanner from "../health/HealthAlertBanner";
+import AppBottomNav from "../layout/AppBottomNav";
+import HomeOpenPlayBanner from "../open-play/HomeOpenPlayBanner";
 
 function localTodayYmd() {
   const d = new Date();
@@ -823,6 +825,8 @@ Gunakan string kosong "" jika field tidak terbaca. summaryText wajib berisi ring
           </div>
         </section>
 
+        <HomeOpenPlayBanner className="px-4 pt-1 pb-2" />
+
         <section className="pt-4 pb-3">
           <div
             ref={insightSliderRef}
@@ -1287,31 +1291,7 @@ Gunakan string kosong "" jika field tidak terbaca. summaryText wajib berisi ring
 
         </main>
 
-        <nav className="absolute bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-100 px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex justify-between items-center z-20">
-          <Link to="/home" className="flex flex-col items-center gap-1 text-primary" href="#">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
-              grid_view
-            </span>
-            <span className="text-[10px] font-bold">Dashboard</span>
-          </Link>
-          <Link className="flex flex-col items-center gap-1 text-slate-400" to="/nutrition/insight">
-            <span className="material-symbols-outlined">restaurant</span>
-            <span className="text-[10px] font-medium">Makanan</span>
-          </Link>
-          <div className="relative -top-8">
-            <Link to="/activity/capture" className="size-14 bg-primary rounded-full text-white shadow-xl shadow-primary/30 flex items-center justify-center">
-              <span className="material-symbols-outlined text-3xl">add</span>
-            </Link>
-          </div>
-          <Link className="flex flex-col items-center gap-1 text-slate-400" to="/workout/insight">
-            <span className="material-symbols-outlined">exercise</span>
-            <span className="text-[10px] font-medium">Olahraga</span>
-          </Link>
-          <Link className="flex flex-col items-center gap-1 text-slate-400" to="/profile">
-            <span className="material-symbols-outlined">person</span>
-            <span className="text-[10px] font-medium">Profil</span>
-          </Link>
-        </nav>
+        <AppBottomNav />
       </div>
 
       {isCaptureOpen && (

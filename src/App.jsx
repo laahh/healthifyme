@@ -48,6 +48,7 @@ import {
   WorkoutManualPage,
   WorkoutScanPage,
   McuPage,
+  SocialPage,
 } from "./pages/SimplerPages";
 
 export default function App() {
@@ -61,6 +62,7 @@ export default function App() {
 
       <Route element={<RequireAuth />}>
         <Route path="/home" element={<HomePage />} />
+        <Route path="/social" element={<SocialPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/history/:id" element={<HistoryItemDetailPage />} />
         <Route path="/community" element={<CommunityPage />} />

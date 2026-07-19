@@ -44,6 +44,8 @@ import WorkoutLogHubContent from "../components/workout/WorkoutLogHubContent";
 import WorkoutManualContent from "../components/workout/WorkoutManualContent";
 import WorkoutScanRedirectContent from "../components/workout/WorkoutScanRedirectContent";
 import McuContent from "../components/mcu/McuContent";
+import SocialHubContent from "../components/social/SocialHubContent";
+import SplashOpening from "../components/splash/SplashOpening";
 
 
 export function SplashPage() {
@@ -53,82 +55,19 @@ export function SplashPage() {
   const nextPath = getSession()
     ? (location.state?.next ?? "/home")
     : "/get-started";
-  const [zoomed, setZoomed] = useState(false);
-
-  const durationMs = 2400;
 
   useEffect(() => {
-    const zoomTimer = setTimeout(() => setZoomed(true), 40);
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const durationMs = reduce ? 800 : 2400;
     const navTimer = setTimeout(() => {
       navigate(nextPath, { replace: true });
     }, durationMs);
-    return () => {
-      clearTimeout(zoomTimer);
-      clearTimeout(navTimer);
-    };
+    return () => clearTimeout(navTimer);
   }, [navigate, nextPath]);
 
-  return (
-    <div
-      className="relative flex h-dvh min-h-dvh w-full items-center justify-center overflow-hidden"
-      style={{ backgroundColor: "#1aa35a" }}
-    >
-      {/* Bentuk lengkung soft seperti splash AYO (hijau lebih gelap) */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute"
-        style={{
-          top: "-12%",
-          left: "-35%",
-          width: "110%",
-          height: "42%",
-          borderRadius: "0 0 55% 45%",
-          background: "#128a4b",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute"
-        style={{
-          bottom: "-14%",
-          right: "-30%",
-          width: "105%",
-          height: "40%",
-          borderRadius: "50% 40% 0 0",
-          background: "#128a4b",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute"
-        style={{
-          top: "18%",
-          right: "-40%",
-          width: "70%",
-          height: "38%",
-          borderRadius: "48%",
-          background: "#159650",
-          opacity: 0.85,
-        }}
-      />
-
-      <h1
-        className="relative z-10 select-none font-headline font-extrabold italic leading-none text-white"
-        style={{
-          fontSize: "clamp(4.75rem, 24vw, 6.75rem)",
-          letterSpacing: "-0.06em",
-          fontStyle: "italic",
-          transform: zoomed ? "scale(1)" : "scale(0.22)",
-          opacity: zoomed ? 1 : 0,
-          transition:
-            "transform 1.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease-out",
-          willChange: "transform, opacity",
-        }}
-      >
-        WELL
-      </h1>
-    </div>
-  );
+  return <SplashOpening />;
 }
 
 export function GetStartedPage() {
@@ -293,6 +232,10 @@ export function HistoryItemDetailPage() {
 
 export function CommunityPage() {
   return <CommunityContent />;
+}
+
+export function SocialPage() {
+  return <SocialHubContent />;
 }
 
 export function CommunityCreatePage() {

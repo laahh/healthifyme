@@ -45,8 +45,8 @@ export default function WorkoutExerciseDetailContent() {
       <div className="flex min-h-screen items-center justify-center bg-surface p-6">
         <div className="text-center">
           <p className="mb-4 text-on-surface-variant">Latihan tidak ditemukan.</p>
-          <Link to="/workout/insight" className="rounded-full bg-primary px-5 py-2 font-semibold text-on-primary">
-            Kembali
+          <Link to="/workout/exercises" className="rounded-full bg-primary px-5 py-2 font-semibold text-on-primary">
+            Kembali ke katalog
           </Link>
         </div>
       </div>
@@ -57,7 +57,7 @@ export default function WorkoutExerciseDetailContent() {
     <div className="relative mx-auto min-h-screen max-w-[375px] bg-surface pb-32 text-on-surface antialiased">
       <header className="fixed left-0 top-0 z-50 mx-auto flex w-full max-w-[375px] items-center justify-between bg-emerald-50/80 px-6 py-4 shadow-none backdrop-blur-xl">
         <Link
-          to="/workout/insight"
+          to="/workout/exercises"
           className="flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-150 hover:bg-emerald-100/50 active:scale-95"
         >
           <span className="material-symbols-outlined text-emerald-700">arrow_back</span>
@@ -70,25 +70,26 @@ export default function WorkoutExerciseDetailContent() {
 
       <main className="pt-20">
         {loading && (
-          <div className="px-6">
-            <div className="mb-4 h-[320px] w-full animate-pulse rounded-none bg-slate-200" />
-            <div className="-mt-8 space-y-3 rounded-t-[32px] bg-surface px-0 pt-8">
+          <div>
+            <div className="mb-4 h-[320px] w-full animate-pulse bg-slate-200" />
+            <div className="-mt-8 space-y-3 rounded-t-[32px] bg-surface px-6 pt-8">
               <div className="h-8 w-[80%] animate-pulse rounded-lg bg-slate-200" />
               <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+              <div className="h-4 w-[60%] animate-pulse rounded bg-slate-100" />
             </div>
           </div>
         )}
 
         {!loading && error && (
           <div className="px-6 py-10">
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950 shadow-sm">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
               {error}
             </div>
             <Link
-              to="/workout/insight"
+              to="/workout/exercises"
               className="mt-6 inline-flex h-12 items-center justify-center rounded-full bg-primary px-6 font-bold text-white"
             >
-              Kembali
+              Kembali ke katalog
             </Link>
           </div>
         )}
@@ -98,11 +99,7 @@ export default function WorkoutExerciseDetailContent() {
             <div className="relative h-[320px] w-full overflow-hidden bg-black">
               {exercise.gifUrl ? (
                 <>
-                  <img
-                    src={exercise.gifUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={exercise.gifUrl} alt="" className="h-full w-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                 </>
               ) : (
@@ -113,98 +110,81 @@ export default function WorkoutExerciseDetailContent() {
               )}
             </div>
 
-            <section className="relative z-10 -mt-8 rounded-t-[32px] bg-surface px-6 pt-8">
-              <div className="mb-4 flex items-start justify-between">
+            <section className="relative z-10 -mt-8 rounded-t-[32px] bg-surface px-6 pt-8 pb-4">
+              <div className="mb-5 flex items-start justify-between gap-3">
                 <h1 className="max-w-[72%] text-2xl font-extrabold leading-tight tracking-tight text-on-surface">
                   {exercise.name}
                 </h1>
-                <span className="rounded-full bg-tertiary/10 px-2 py-1 text-xs font-bold uppercase tracking-widest text-tertiary">
+                <span className="shrink-0 rounded-full bg-tertiary/10 px-2 py-1 text-xs font-bold uppercase tracking-widest text-tertiary">
                   Gerakan
                 </span>
               </div>
 
-              <p className="mb-4 line-clamp-4 text-on-surface-variant body-md leading-relaxed">
-                Ikuti langkah di bawah dengan form yang aman. Sesuaikan set dan repetisi dengan kondisi Anda. Periksa
-                ringkasan bagian tubuh dan alat sebelum mulai.
-              </p>
-
               {exercise.exerciseCode ? (
-                <div className="mb-6 rounded-2xl bg-surface-container-low p-3">
-                  <p className="text-[11px] text-on-surface-variant">Kode latihan</p>
-                  <p className="font-mono text-sm font-semibold text-on-surface">{exercise.exerciseCode}</p>
-                </div>
+                <p className="mb-5 font-mono text-xs text-on-surface-variant">{exercise.exerciseCode}</p>
               ) : null}
 
-              <div className="mb-6 space-y-4">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Ringkasan latihan</p>
-                  <div className="grid grid-cols-1 gap-2 text-sm">
-                    {[
-                      { label: "Bagian tubuh", value: joinNames(exercise.bodyParts) },
-                      { label: "Peralatan", value: joinNames(exercise.equipments) },
-                      { label: "Otot utama", value: joinNames(exercise.targetMuscles) },
-                      ...(exercise.secondaryMuscles?.length
-                        ? [{ label: "Otot sekunder", value: joinNames(exercise.secondaryMuscles) }]
-                        : []),
-                    ].map((row) => (
-                      <div
-                        key={row.label}
-                        className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5"
+              <div className="mb-6 space-y-2">
+                {[
+                  { label: "Bagian tubuh", value: joinNames(exercise.bodyParts) },
+                  { label: "Peralatan", value: joinNames(exercise.equipments) },
+                  { label: "Otot utama", value: joinNames(exercise.targetMuscles) },
+                  ...(exercise.secondaryMuscles?.length
+                    ? [{ label: "Otot sekunder", value: joinNames(exercise.secondaryMuscles) }]
+                    : []),
+                ].map((row) => (
+                  <div
+                    key={row.label}
+                    className="flex items-center justify-between gap-3 border-b border-slate-100 py-3 last:border-b-0"
+                  >
+                    <span className="text-[13px] font-medium text-on-surface-variant">{row.label}</span>
+                    <span className="max-w-[55%] shrink-0 text-right text-[13px] font-bold text-on-surface">
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {(exercise.bodyParts || []).length > 0 || (exercise.equipments || []).length > 0 ? (
+                <div className="mb-6">
+                  <div className="flex flex-wrap gap-2">
+                    {(exercise.bodyParts || []).map((p) => (
+                      <span
+                        key={`bp-${p.id}`}
+                        className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
                       >
-                        <span className="text-[13px] font-medium text-slate-600">{row.label}</span>
-                        <span className="max-w-[55%] shrink-0 text-right text-[13px] font-bold text-slate-900">
-                          {row.value}
-                        </span>
-                      </div>
+                        {p.name}
+                      </span>
+                    ))}
+                    {(exercise.equipments || []).map((p) => (
+                      <span
+                        key={`eq-${p.id}`}
+                        className="rounded-full bg-surface-container-low px-3 py-1 text-xs font-semibold text-on-surface"
+                      >
+                        {p.name}
+                      </span>
                     ))}
                   </div>
                 </div>
-
-                {(exercise.bodyParts || []).length > 0 || (exercise.equipments || []).length > 0 ? (
-                  <div>
-                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Tag</p>
-                    <div className="flex flex-wrap gap-2">
-                      {(exercise.bodyParts || []).map((p) => (
-                        <span
-                          key={`bp-${p.id}`}
-                          className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
-                        >
-                          {p.name}
-                        </span>
-                      ))}
-                      {(exercise.equipments || []).map((p) => (
-                        <span
-                          key={`eq-${p.id}`}
-                          className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
-                        >
-                          {p.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              ) : null}
 
               {(exercise.instructions || []).length > 0 ? (
-                <div className="mb-6">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Langkah-langkah</p>
-                  <div className="space-y-2">
+                <div className="pb-8">
+                  <p className="mb-3 text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                    Langkah-langkah
+                  </p>
+                  <ol className="space-y-3">
                     {exercise.instructions.map((step) => (
-                      <div key={step.stepOrder} className="rounded-2xl bg-surface-container-low p-3">
-                        <p className="mb-1 text-[11px] font-bold text-primary">Langkah {step.stepOrder}</p>
-                        <p className="text-sm font-semibold text-on-surface">{step.body}</p>
-                      </div>
+                      <li key={step.stepOrder} className="flex gap-3">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {step.stepOrder}
+                        </span>
+                        <p className="pt-0.5 text-sm leading-relaxed text-on-surface">{step.body}</p>
+                      </li>
                     ))}
-                  </div>
+                  </ol>
                 </div>
               ) : null}
-
-              <div className="space-y-2 pb-12">
-                <div className="rounded-2xl bg-surface-container-low p-3">
-                  <p className="text-[11px] text-on-surface-variant">Gerakan dari katalog</p>
-                  <p className="text-sm font-semibold text-on-surface">Latihan terstruktur · instruksi langkah demi langkah</p>
-                </div>
-              </div>
             </section>
           </>
         )}

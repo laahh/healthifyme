@@ -184,59 +184,121 @@ export default function CognitiveTestSessionContent() {
   return (
     <>
     {step !== "pvt" && step !== "memory" && (
-    <div className="mx-auto min-h-screen max-w-md bg-surface pb-28 text-on-surface">
-      <header className="sticky top-0 z-10 border-b border-outline-variant/20 bg-surface/95 px-4 py-3 backdrop-blur-md">
+    <div className="mx-auto min-h-screen max-w-md bg-surface pb-28 font-['Public_Sans',sans-serif] text-on-surface">
+      <header className="sticky top-0 z-10 border-b border-slate-100 bg-white/90 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-md">
         <div className="flex items-center gap-3">
           <Link
             to="/cognitive-tests"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary hover:bg-primary/10"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full text-primary hover:bg-primary/10"
           >
             <span className="material-symbols-outlined">arrow_back</span>
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="font-headline text-lg font-bold tracking-tight">Sesi tes lengkap</h1>
-            <p className="text-[11px] text-on-surface-variant">PVT lalu memori kerja · satu alur</p>
+            <h1 className="text-lg font-bold tracking-tight text-slate-900">Sesi tes lengkap</h1>
+            <p className="text-[11px] text-slate-500">PVT lalu memori kerja · satu alur</p>
           </div>
         </div>
-        {step !== "landing" && step !== "summary" && (
-          <div className="mt-3 flex gap-1.5">
+        {step === "landing" || step === "summary" || step === "bridge" ? (
+          <div className="mt-3 flex items-center gap-2">
             <div
-              className={`h-1 flex-1 rounded-full ${step === "pvt" || step === "bridge" ? "bg-primary" : "bg-outline-variant/25"}`}
+              className={`h-1.5 flex-1 rounded-full ${
+                step === "landing" ? "bg-primary" : "bg-primary"
+              }`}
             />
-            <div className={`h-1 flex-1 rounded-full ${step === "memory" ? "bg-tertiary" : "bg-outline-variant/25"}`} />
+            <div
+              className={`h-1.5 flex-1 rounded-full ${
+                step === "bridge" || step === "summary" ? "bg-rose-500" : "bg-slate-200"
+              }`}
+            />
+            <div
+              className={`h-1.5 flex-1 rounded-full ${
+                step === "summary" ? "bg-emerald-500" : "bg-slate-200"
+              }`}
+            />
           </div>
-        )}
+        ) : null}
       </header>
 
       <main className="px-4 pt-5">
         {step === "landing" && (
           <div className="space-y-5">
-            <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-5 shadow-sm">
-              <p className="mb-3 text-sm font-bold text-primary">Alur skrining</p>
-              <ol className="list-decimal space-y-2 pl-4 text-sm leading-relaxed text-on-surface-variant">
-                <li>
-                  <strong className="text-on-surface">PVT</strong> — reaksi terhadap sinyal setelah jeda acak (±18 percobaan).
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                Identitas peserta
+              </p>
+              <dl className="grid grid-cols-1 gap-2.5 text-sm">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] text-slate-500">Nama</dt>
+                  <dd className="truncate font-bold text-slate-900">{participant.name}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] text-slate-500">SID</dt>
+                  <dd className="font-mono text-[13px] font-bold tracking-wide text-slate-900">
+                    {participant.sid}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] text-slate-500">Perusahaan</dt>
+                  <dd className="truncate font-semibold text-slate-800">{participant.company}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <p className="mb-3 text-sm font-bold text-primary">Alur sesi</p>
+              <ol className="space-y-3">
+                <li className="flex gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-white">
+                    1
+                  </span>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-900">PVT</p>
+                    <p className="text-[12px] leading-snug text-slate-500">
+                      Reaksi terhadap sinyal setelah jeda acak (±18 percobaan)
+                    </p>
+                  </div>
                 </li>
-                <li>
-                  <strong className="text-on-surface">Memori kerja</strong> — ingat pola grid 4×4, lalu tentukan sama atau berbeda dengan pola berikutnya (6 babak).
+                <li className="flex gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-rose-500 text-[12px] font-bold text-white">
+                    2
+                  </span>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-900">Memori kerja</p>
+                    <p className="text-[12px] leading-snug text-slate-500">
+                      Ingat pola grid 4×4, lalu tentukan sama atau berbeda (6 babak)
+                    </p>
+                  </div>
                 </li>
-                <li>Ringkasan <strong className="text-on-surface">lulus/gagal skrining</strong> per tes dan saran &quot;layak bekerja&quot; berbasis ambang konservatif (bukan diagnosis dokter).</li>
+                <li className="flex gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[12px] font-bold text-slate-700">
+                    3
+                  </span>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-900">Ringkasan</p>
+                    <p className="text-[12px] leading-snug text-slate-500">
+                      Lulus/gagal skrining + saran layak bekerja (bukan diagnosis)
+                    </p>
+                  </div>
+                </li>
               </ol>
             </div>
-            <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-on-surface-variant">
-              <span className="font-bold text-amber-800 dark:text-amber-200">Penting: </span>
-              Hasil hanya skrining kewaspadaan singkat. Keputusan medis atau K3 tetap di tangan dokter / perusahaan Anda.
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-900">
+              <span className="font-bold">Penting: </span>
+              Hasil hanya skrining kewaspadaan singkat. Keputusan medis atau K3 tetap di tangan dokter /
+              perusahaan Anda.
             </div>
+
             <button
               type="button"
               onClick={() => setStep("pvt")}
-              className="w-full rounded-2xl bg-primary py-3.5 font-bold text-on-primary shadow-md"
+              className="w-full rounded-2xl bg-primary py-3.5 text-sm font-bold text-white shadow-md shadow-primary/25"
             >
               Mulai sesi (PVT dulu)
             </button>
             <Link
               to="/cognitive-tests/results"
-              className="block w-full rounded-2xl border border-outline-variant/25 py-3 text-center text-sm font-semibold text-primary"
+              className="block w-full rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700"
             >
               Lihat riwayat hasil
             </Link>
@@ -245,26 +307,40 @@ export default function CognitiveTestSessionContent() {
 
         {step === "bridge" && pvtRaw && pvtEval && (
           <div className="space-y-5">
-            <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-5">
-              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Bagian 1 selesai</p>
+            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Bagian 1 selesai
+              </p>
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <h2 className="font-headline text-lg font-bold">PVT</h2>
+                <h2 className="text-lg font-bold text-slate-900">PVT</h2>
                 <Badge ok={pvtEval.pass}>{pvtEval.pass ? "Berhasil skrining" : "Gagal skrining"}</Badge>
               </div>
-              <p className="mb-3 text-sm text-on-surface-variant">{pvtEval.label}</p>
-              <div className="space-y-1.5 rounded-xl bg-surface-container-low p-3 text-xs text-on-surface-variant">
-                <p>
-                  Respons valid <strong className="text-on-surface">{pvtRaw.validTrials}</strong> / {pvtRaw.trials} · RT mean{" "}
-                  <strong className="text-on-surface">{pvtRaw.meanRtMs}</strong> ms · kelalaian{" "}
-                  <strong className="text-on-surface">{pvtRaw.lapses}</strong>
-                </p>
-                <p className="text-[10px] opacity-90">{pvtEval.thresholdsHint}</p>
+              <p className="mb-3 text-sm text-slate-600">{pvtEval.label}</p>
+              <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-center">
+                <div>
+                  <p className="text-[10px] text-slate-400">Valid</p>
+                  <p className="text-sm font-extrabold tabular-nums text-slate-900">
+                    {pvtRaw.validTrials}/{pvtRaw.trials}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400">RT mean</p>
+                  <p className="text-sm font-extrabold tabular-nums text-slate-900">
+                    {pvtRaw.meanRtMs}
+                    <span className="text-[9px] font-medium text-slate-400"> ms</span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400">Kelalaian</p>
+                  <p className="text-sm font-extrabold tabular-nums text-slate-900">{pvtRaw.lapses}</p>
+                </div>
               </div>
+              <p className="mt-2 text-[10px] text-slate-400">{pvtEval.thresholdsHint}</p>
             </div>
             <button
               type="button"
               onClick={() => setStep("memory")}
-              className="w-full rounded-2xl bg-tertiary py-3.5 font-bold text-white shadow-md"
+              className="w-full rounded-2xl bg-rose-600 py-3.5 text-sm font-bold text-white shadow-md"
             >
               Lanjut ke tes memori kerja
             </button>
@@ -273,32 +349,35 @@ export default function CognitiveTestSessionContent() {
 
         {step === "summary" && memRaw && memEval && overall && (
           <div className="space-y-5">
-            <div className="rounded-2xl border border-primary/25 bg-surface-container-lowest p-4 shadow-sm">
-              <div className="mb-3 flex items-start gap-2">
-                <span className="material-symbols-outlined shrink-0 text-primary text-xl">badge</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Identitas peserta</p>
-                  {/* <p className="mt-0.5 text-[10px] leading-relaxed text-on-surface-variant/80">
-                    Hasil terikat akun login ini. Tangkapan layar tanpa blok ini tidak dapat diverifikasi.
-                  </p> */}
-                </div>
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-xl">badge</span>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Identitas peserta
+                </p>
               </div>
               <dl className="grid gap-2.5 text-sm">
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Nama</dt>
-                  <dd className="font-bold leading-snug text-on-surface">{participant.name}</dd>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Nama</dt>
+                  <dd className="font-bold leading-snug text-slate-900">{participant.name}</dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">SID</dt>
-                  <dd className="font-mono text-sm font-bold tracking-wide text-on-surface">{participant.sid}</dd>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">SID</dt>
+                  <dd className="font-mono text-sm font-bold tracking-wide text-slate-900">
+                    {participant.sid}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Perusahaan</dt>
-                  <dd className="font-semibold leading-snug text-on-surface">{participant.company}</dd>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Perusahaan
+                  </dt>
+                  <dd className="font-semibold leading-snug text-slate-800">{participant.company}</dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">Waktu tes</dt>
-                  <dd className="text-xs text-on-surface-variant">
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Waktu tes
+                  </dt>
+                  <dd className="text-xs text-slate-500">
                     {(summaryCompletedAt ?? new Date()).toLocaleString("id-ID", {
                       weekday: "short",
                       day: "numeric",
@@ -313,53 +392,89 @@ export default function CognitiveTestSessionContent() {
             </div>
 
             <div className={`rounded-2xl border-2 p-5 ${overallCardClass}`}>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Kesimpulan skrining</p>
-              <h2 className="mb-2 font-headline text-lg font-bold leading-snug">{overall.title}</h2>
-              <p className="text-sm leading-relaxed text-on-surface-variant">{overall.subtitle}</p>
-              <ul className="mt-4 list-disc space-y-1.5 pl-4 text-xs text-on-surface-variant">
-                {overall.recommendations.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="grid gap-3">
-              <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-4">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="material-symbols-outlined text-primary text-xl">schedule</span>
-                  <span className="font-bold">PVT</span>
-                  <Badge ok={pvtEval?.pass}>{pvtEval?.pass ? "Berhasil" : "Gagal"}</Badge>
+              <div className="mb-3 flex items-start gap-3">
+                <div className="flex size-14 shrink-0 flex-col items-center justify-center rounded-2xl bg-white/80 shadow-sm">
+                  <span className="material-symbols-outlined text-2xl text-slate-700">
+                    {overall.color === "emerald"
+                      ? "check_circle"
+                      : overall.color === "red"
+                        ? "warning"
+                        : "info"}
+                  </span>
                 </div>
-                <p className="text-xs text-on-surface-variant">{pvtEval?.label}</p>
-              </div>
-              <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-4">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="material-symbols-outlined text-tertiary text-xl">psychology</span>
-                  <span className="font-bold">Memori kerja</span>
-                  <Badge ok={memEval.pass}>{memEval.pass ? "Berhasil" : "Gagal"}</Badge>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Kesimpulan skrining
+                  </p>
+                  <h2 className="mt-0.5 text-lg font-bold leading-snug text-slate-900">
+                    {overall.title}
+                  </h2>
                 </div>
-                <p className="text-xs text-on-surface-variant">{memEval.label}</p>
-                <p className="mt-2 text-[10px] text-on-surface-variant/80">{memEval.thresholdsHint}</p>
+              </div>
+              <p className="text-sm leading-relaxed text-slate-700">{overall.subtitle}</p>
+              {Array.isArray(overall.recommendations) && overall.recommendations.length > 0 ? (
+                <ul className="mt-4 list-disc space-y-1.5 pl-4 text-xs text-slate-600">
+                  {overall.recommendations.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm">
+                <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <span className="material-symbols-outlined text-primary text-[18px]">bolt</span>
+                  <span className="text-[13px] font-bold text-slate-900">PVT</span>
+                </div>
+                <Badge ok={pvtEval?.pass}>{pvtEval?.pass ? "Berhasil" : "Gagal"}</Badge>
+                <p className="mt-2 text-[11px] leading-snug text-slate-500">{pvtEval?.label}</p>
+                {pvtRaw?.meanRtMs != null ? (
+                  <p className="mt-2 text-[12px] font-bold tabular-nums text-slate-800">
+                    {pvtRaw.meanRtMs} ms mean
+                  </p>
+                ) : null}
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm">
+                <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <span className="material-symbols-outlined text-rose-600 text-[18px]">psychology</span>
+                  <span className="text-[13px] font-bold text-slate-900">Memori</span>
+                </div>
+                <Badge ok={memEval.pass}>{memEval.pass ? "Berhasil" : "Gagal"}</Badge>
+                <p className="mt-2 text-[11px] leading-snug text-slate-500">{memEval.label}</p>
+                {memRaw?.score != null ? (
+                  <p className="mt-2 text-[12px] font-bold tabular-nums text-slate-800">
+                    Skor {memRaw.score}
+                  </p>
+                ) : null}
               </div>
             </div>
 
-            <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-3 text-[10px] leading-relaxed text-on-surface-variant">
-              Parameter &quot;layak bekerja&quot; menggabungkan dua domain (kewaspadaan + memori). Dua tes lulus → skrining mendukung tugas
-              biasa; satu gagal → waspada; dua gagal → hindari tugas berisiko tinggi sampai kondisi membaik atau dievaluasi profesional.
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-[10px] leading-relaxed text-slate-500">
+              Parameter &quot;layak bekerja&quot; menggabungkan kewaspadaan + memori. Dua tes lulus → mendukung
+              tugas biasa; satu gagal → waspada; dua gagal → hindari tugas berisiko tinggi sampai dievaluasi
+              profesional.
             </div>
 
-            <div className="flex flex-col gap-2 pt-2">
-              <button type="button" onClick={resetFlow} className="rounded-2xl bg-primary py-3.5 font-bold text-on-primary">
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={resetFlow}
+                className="rounded-2xl bg-primary py-3.5 text-sm font-bold text-white shadow-md shadow-primary/25"
+              >
                 Ulangi sesi lengkap
               </button>
               <Link
                 to="/cognitive-tests/results"
-                className="rounded-2xl border border-outline-variant/30 py-3.5 text-center font-semibold text-primary"
+                className="rounded-2xl border border-slate-200 bg-white py-3.5 text-center text-sm font-semibold text-primary"
               >
                 Riwayat hasil
               </Link>
-              <Link to="/cognitive-tests" className="rounded-2xl py-3 text-center text-sm text-on-surface-variant">
-                Menu tes
+              <Link
+                to="/cognitive-tests"
+                className="rounded-2xl py-3 text-center text-sm font-medium text-slate-500"
+              >
+                Kembali ke menu
               </Link>
             </div>
           </div>

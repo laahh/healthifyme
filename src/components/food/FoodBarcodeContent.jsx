@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 import {
   getStoredMealType,
   logFoodItem,
@@ -11,10 +12,16 @@ import { hasHealthAlerts, healthAlertSeverity } from "../../lib/healthAlertApi";
 
 const ACCENT = "#2563eb";
 
+function digitsOnly(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
 export default function FoodBarcodeContent() {
   const navigate = useNavigate();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const zxingControlsRef = useRef(null);
+  const detectingRef = useRef(false);
   const [code, setCode] = useState("");
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -23,61 +30,116 @@ export default function FoodBarcodeContent() {
   const [scanning, setScanning] = useState(false);
   const meal = getStoredMealType();
 
+  const stopCamera = () => {
+    try {
+      zxingControlsRef.current?.stop?.();
+    } catch {
+      /* ignore */
+    }
+    zxingControlsRef.current = null;
+    streamRef.current?.getTracks?.().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setScanning(false);
+  };
+
   useEffect(() => {
     return () => {
+      detectingRef.current = false;
+      try {
+        zxingControlsRef.current?.stop?.();
+      } catch {
+        /* ignore */
+      }
       streamRef.current?.getTracks?.().forEach((t) => t.stop());
     };
   }, []);
 
-  const stopCamera = () => {
-    streamRef.current?.getTracks?.().forEach((t) => t.stop());
-    streamRef.current = null;
-    setScanning(false);
+  const onBarcodeFound = async (rawValue) => {
+    const raw = digitsOnly(rawValue);
+    if (!raw || detectingRef.current) return;
+    detectingRef.current = true;
+    stopCamera();
+    setCode(raw);
+    await lookup(raw);
+  };
+
+  const startWithNativeDetector = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+    });
+    streamRef.current = stream;
+    const video = videoRef.current;
+    if (!video) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error("Video belum siap");
+    }
+    video.srcObject = stream;
+    await video.play();
+    setScanning(true);
+
+    const detector = new window.BarcodeDetector({
+      formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"],
+    });
+
+    const tick = async () => {
+      if (!videoRef.current || !streamRef.current || detectingRef.current) return;
+      try {
+        const codes = await detector.detect(videoRef.current);
+        if (codes?.[0]?.rawValue) {
+          await onBarcodeFound(codes[0].rawValue);
+          return;
+        }
+      } catch {
+        /* keep scanning */
+      }
+      if (streamRef.current) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
+  const startWithZxing = async () => {
+    setScanning(true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const video = videoRef.current;
+    if (!video) throw new Error("Video belum siap");
+
+    const reader = new BrowserMultiFormatReader();
+    const controls = await reader.decodeFromVideoDevice(undefined, video, (result) => {
+      if (result?.getText?.()) {
+        onBarcodeFound(result.getText());
+      }
+    });
+    zxingControlsRef.current = controls;
   };
 
   const startCamera = async () => {
     setError("");
-    if (!("BarcodeDetector" in window)) {
-      setError("Browser tidak mendukung BarcodeDetector. Ketik kode manual di bawah.");
+    detectingRef.current = false;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Kamera tidak tersedia di perangkat ini. Ketik barcode manual di bawah.");
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setScanning(true);
-      const detector = new window.BarcodeDetector({
-        formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"],
-      });
-      const tick = async () => {
-        if (!videoRef.current || !streamRef.current) return;
+      if ("BarcodeDetector" in window) {
         try {
-          const codes = await detector.detect(videoRef.current);
-          if (codes?.[0]?.rawValue) {
-            const raw = String(codes[0].rawValue).replace(/\D/g, "");
-            stopCamera();
-            setCode(raw);
-            await lookup(raw);
-            return;
-          }
+          await startWithNativeDetector();
+          return;
         } catch {
-          /* keep scanning */
+          /* fall through to ZXing */
         }
-        if (streamRef.current) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
+      }
+      await startWithZxing();
     } catch {
-      setError("Tidak bisa membuka kamera. Ketik barcode manual.");
+      stopCamera();
+      setError("Tidak bisa membuka kamera. Izinkan akses kamera atau ketik barcode manual.");
     }
   };
 
   const lookup = async (rawCode) => {
-    const c = String(rawCode || code).replace(/\D/g, "");
+    const c = digitsOnly(rawCode || code);
     if (!c) {
       setError("Masukkan barcode.");
       return;
@@ -93,6 +155,7 @@ export default function FoodBarcodeContent() {
       setError(e?.message || "Produk tidak ditemukan.");
     } finally {
       setLoading(false);
+      detectingRef.current = false;
     }
   };
 
@@ -150,15 +213,19 @@ export default function FoodBarcodeContent() {
       </header>
 
       <main className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        <div className="overflow-hidden rounded-2xl bg-black">
-          {scanning ? (
-            <video ref={videoRef} className="h-48 w-full object-cover" muted playsInline />
-          ) : (
+        <div className="relative overflow-hidden rounded-2xl bg-black">
+          <video
+            ref={videoRef}
+            className={`h-48 w-full object-cover ${scanning ? "block" : "hidden"}`}
+            muted
+            playsInline
+          />
+          {!scanning ? (
             <div className="flex h-48 flex-col items-center justify-center gap-2 text-white/80">
               <span className="material-symbols-outlined text-4xl">barcode_reader</span>
               <p className="text-[12px]">Arahkan ke barcode produk</p>
             </div>
-          )}
+          ) : null}
         </div>
 
         <button
@@ -172,7 +239,7 @@ export default function FoodBarcodeContent() {
         <div className="flex gap-2">
           <input
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 14))}
+            onChange={(e) => setCode(digitsOnly(e.target.value).slice(0, 14))}
             placeholder="Atau ketik barcode…"
             className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none"
           />
@@ -193,7 +260,11 @@ export default function FoodBarcodeContent() {
         {product ? (
           <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
             {product.image_url ? (
-              <img src={product.image_url} alt="" className="mb-3 h-28 w-full rounded-xl object-contain bg-slate-50" />
+              <img
+                src={product.image_url}
+                alt=""
+                className="mb-3 h-28 w-full rounded-xl bg-slate-50 object-contain"
+              />
             ) : null}
             <p className="text-[15px] font-bold text-slate-900">{product.food_name}</p>
             <p className="mt-1 text-[12px] text-slate-500">

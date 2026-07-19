@@ -98,13 +98,13 @@ export default function ProfileContent() {
       localStorage.setItem("profile_info_v1", JSON.stringify(profile));
       if (nextUser?.id) {
         await upsertProfileToCloud(nextUser.id, {
-          name: profile.name,
-          phone: profile.phone,
-          email: profile.email,
-          address: nextUser.address || null,
-        }).catch(() => {});
-      }
-      setSessionTick((x) => x + 1);
+        name: profile.name,
+        phone: profile.phone,
+        email: profile.email,
+        address: nextUser.address || null,
+      }).catch(() => {});
+    }
+    setSessionTick((x) => x + 1);
       showSuccess("Profil disimpan");
       setPanel(null);
     } catch (e) {
@@ -316,21 +316,21 @@ export default function ProfileContent() {
               <ProfileMenuGroup title="Kesehatan" items={healthMenu} />
               <ProfileMenuGroup title="Akun & aplikasi" items={accountMenu} />
 
-              <button
-                type="button"
-                onClick={handleLogout}
+                <button
+                  type="button"
+                  onClick={handleLogout}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-white py-4 font-bold text-red-600 shadow-sm transition-colors hover:bg-red-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-red-950/30"
-              >
+                >
                 <span className="material-symbols-outlined">logout</span>
                 Keluar
-              </button>
+                </button>
 
               <p className="pb-2 text-center text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
                 © OHS Division · 2026
               </p>
-            </>
-          )}
-        </main>
+          </>
+        )}
+      </main>
 
         <nav className="fixed bottom-0 left-0 right-0 z-20 mx-auto flex max-w-md items-center justify-between border-t border-slate-100 bg-white px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
           <Link to="/home" className={navItemClass("/home")}>
